@@ -1,51 +1,67 @@
-from transformers import pipeline
-import re
+from litgpt import LLM
+import openai
+import dotenv
+import os
 import json
+from tqdm import tqdm
 
-pipe = pipeline("text-generation", model="allenai/OLMo-2-1124-7B-Instruct")
+dotenv.load_dotenv()
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def md_to_json(md_content):
-    """Convert markdown quiz format to JSON."""
-    questions = []
-    blocks = re.split(r'^# Question \d+$', md_content, flags=re.MULTILINE)[1:]
+llm = LLM.load("allenai/OLMo-2-1124-7B-Instruct")
+llm_finetuned = LLM.load("./out/finetune/lora/final")
+
+def eval_message(question_with_options, context_data=None) -> str:
+    message = f"Respond to the following question using one of the letters A, B, C, D only. Do not use any other text. \n{question_with_options}"
+    if context_data:
+        message += f"\n\nYou can use the following context data to answer the question: {context_data}"
+    return message
+
+def eval_questions_with_litgpt(json_content, llm, context_data=None):
+    results = []
+    for question in tqdm(json_content):
+        messages = [
+            {"role": "user", "content": eval_message(question['input'], context_data)},
+        ]
+        generated_answer = llm.generate(messages)
+        # Retrieve the first character
+        generated_answer = generated_answer[0]
+
+        print(f"Question: {question['input']}")
+        print(f"Generated answer: {generated_answer}")
+        print(f"Correct answer: {question['output']}")
+        print("--------------------------------")
+
+        results.append({"question": question["input"], "generated_answer": generated_answer, "correct_answer": question["output"], "is_correct": generated_answer == question["output"]})
+    return results
+
+def eval_questions_with_openai(json_content, model="gpt-4o", context_data=None):
+    results = []
+    for question in json_content:
+        response = client.responses.create(
+            model=model,
+            input=eval_message(question['question_with_options'], context_data),
+        )
+        generated_answer = response.output_text[0]
+
+        print(f"Question: {question['question']}")
+        print(f"Generated answer: {generated_answer}")
+        print(f"Correct answer: {question['correct_answer']}")
+        print("--------------------------------")
+
+        results.append({"question": question["question"], "generated_answer": generated_answer, "correct_answer": question["correct_answer"], "is_correct": generated_answer == question["correct_answer"]})
+    return results
+
+if __name__ == "__main__":
+    with open("data/wiki_1k_questions.jsonl", "r") as f:
+        json_content = [json.loads(l) for l in f]
+
+    # Sample 100 questions
+    json_content = json_content[:100]
     
-    for i, block in enumerate(blocks, 1):
-        lines = [l.strip() for l in block.strip().split('\n') if l.strip()]
-        if len(lines) < 2: continue
-        
-        q_line = next((l for l in lines if l.startswith('Question:')), None)
-        a_line = next((l for l in lines if l.startswith('Answer:')), None)
-        if not q_line or not a_line: continue
-        
-        text = q_line[9:].strip()
-        first_opt = text.find('A)')
-        question = text[:first_opt].strip()
-        
-        options = {}
-        for match in re.findall(r'([A-D])\)\s*([^A-D]*?)(?=\s*[A-D]\)|$)', text):
-            options[match[0]] = match[1].strip()
-        
-        answer = a_line.split(':', 1)[1].strip()
-        questions.append({
-            "id": i, "question_with_options": text, "question": question, "options": options, 
-            "correct_answer": answer, "answer_text": options.get(answer, "")
-        })
-    
-    return {"questions": questions}
+    print("Evaluating with OLMo-2-1124-7B-Instruct")
+    pipeline_results = eval_questions_with_litgpt(json_content, llm)
+    print(f"OLMo Blind Accuracy: {sum(result['is_correct'] for result in pipeline_results) / len(pipeline_results)}")
 
-with open("data/2025_nba_playoffs_questions.md", "r") as f:
-    md_content = f.read()
-
-json_content = md_to_json(md_content)
-
-print(json_content)
-
-for question in json_content["questions"]:
-    messages = [
-        {"role": "user", "content": f"Respond to the following question using the letters A, B, C, D only. \n{question['question_with_options']}"},
-    ]
-    response = pipe(messages)
-    print(response.choices[0].message.content)
-    print(question["correct_answer"])
-    print("--------------------------------")
-
+    finetune_pipeline_results = eval_questions_with_litgpt(json_content, llm_finetuned)
+    print(f"Finetuned Accuracy: {sum(result['is_correct'] for result in finetune_pipeline_results) / len(finetune_pipeline_results)}")

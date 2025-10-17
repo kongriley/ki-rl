@@ -1,39 +1,89 @@
 # Question 1
-Question: Which team won the 2025 NBA Finals? A) Indiana Pacers B) Oklahoma City Thunder C) Boston Celtics D) Denver Nuggets
+Question: Which team won the 2025 NBA Finals over the Indiana Pacers?
+A) Indiana Pacers 
+B) Oklahoma City Thunder 
+C) Boston Celtics 
+D) Denver Nuggets
+
 Answer: B
 
 # Question 2
-Question: Which team became the first-ever 10-seed to advance from the play-in tournament into the playoffs? A) Chicago Bulls B) Miami Heat C) Atlanta Hawks D) Orlando Magic
+Question: During the 2025 NBA Playoffs, which team became the first-ever 10-seed to advance from the play-in tournament into the playoffs? 
+A) Orlando Magic 
+B) Miami Heat 
+C) Chicago Bulls 
+D) Dallas Mavericks
+
 Answer: B
 
 # Question 3
-Question: Which franchise entered 2025 with the NBA’s longest active playoff drought at nine consecutive seasons? A) Washington Wizards B) Portland Trail Blazers C) Charlotte Hornets D) Utah Jazz
-Answer: C
+Question: In the 2025 NBA Playoffs first round, which No. 2 seed lost a seven-game series to the No. 7 seed Golden State Warriors? 
+A) Denver Nuggets 
+B) Houston Rockets 
+C) Oklahoma City Thunder 
+D) Minnesota Timberwolves
+
+Answer: B
 
 # Question 4
-Question: Who became the first player in NBA playoff history to make six 3-pointers in the fourth quarter (ECF Game 1 vs. Knicks)? A) Tyrese Haliburton B) Aaron Nesmith C) Pascal Siakam D) Obi Toppin
+Question: In 2025, which team clinched the No. 1 seed in the Eastern Conference?
+A) Boston Celtics 
+B) Cleveland Cavaliers 
+C) Milwaukee Bucks 
+D) Miami Heat
+
 Answer: B
 
 # Question 5
-Question: Which team set an NBA playoff record with 87 first-half points (WCSF Game 2)? A) Denver Nuggets B) Oklahoma City Thunder C) Cleveland Cavaliers D) Boston Celtics
-Answer: B
+Question: By how many combined points did the Cleveland Cavaliers outscore the Miami Heat in their 2025 first-round sweep, setting a new NBA record for series margin? 
+A) 118 
+B) 120 
+C) 122 
+D) 126
+
+Answer: C
 
 # Question 6
-Question: Which first-round series went seven games with both teams scoring an identical total number of points? A) Warriors vs. Rockets B) Nuggets vs. Clippers C) Celtics vs. Knicks D) Thunder vs. Grizzlies
-Answer: A
+Question: During the 2025 Western Conference Finals, a day after being announced as MVP, which player scored 38 points in Game 2 to lead his team to a 2–0 series lead over Minnesota? 
+A) Nikola Jokić 
+B) Anthony Edwards 
+C) Shai Gilgeous-Alexander 
+D) Jalen Williams
+
+Answer: C
 
 # Question 7
-Question: Who posted 44 points and 15 rebounds in Game 5 of the Thunder–Nuggets series? A) Jamal Murray B) Nikola Jokić C) Shai Gilgeous-Alexander D) Jalen Williams
-Answer: B
+Question: During the 2025 Western Conference Semifinals, which team set an NBA playoff record with 87 first-half points in a 149–106 win over Denver? 
+A) Oklahoma City Thunder 
+B) Denver Nuggets 
+C) Golden State Warriors 
+D) Minnesota Timberwolves
 
-# Question 8
-Question: Which player tore his Achilles tendon in Game 4 of Pacers–Bucks? A) Damian Lillard B) Giannis Antetokounmpo C) Tyrese Haliburton D) Gary Trent Jr.
 Answer: A
 
+# Question 8
+Question: In 2025, which network had exclusive coverage of the Eastern Conference Finals? 
+A) ABC 
+B) ESPN 
+C) TNT 
+D) NBC
+
+Answer: C
+
 # Question 9
-Question: Which head coach became the seventh to reach 100 playoff wins (and later 101) during the 2025 playoffs? A) Tyronn Lue B) Steve Kerr C) Erik Spoelstra D) Michael Malone
-Answer: B
+Question: In 2025, which franchise missed the NBA playoffs for the first time since 2017? 
+A) Philadelphia 76ers 
+B) Phoenix Suns 
+C) Dallas Mavericks 
+D) New Orleans Pelicans
+
+Answer: A
 
 # Question 10
-Question: Which team won the Maurice Podoloff Trophy for the NBA’s best regular-season record for the first time in franchise history? A) Boston Celtics B) Cleveland Cavaliers C) Oklahoma City Thunder D) New York Knicks
-Answer: C
+Question: In 2025, who was named Eastern Conference Finals MVP after the Pacers eliminated the Knicks? 
+A) Tyrese Haliburton 
+B) Pascal Siakam 
+C) Aaron Nesmith 
+D) Myles Turner
+
+Answer: B
