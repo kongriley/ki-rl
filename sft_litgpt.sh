@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p vision-pulkitag-h100,vision-pulkitag-a100        # specify the partition
-#SBATCH -q vision-pulkitag-debug                            # specify the QoS (free cycles)
+#SBATCH -q vision-pulkitag-free-cycles                            # specify the QoS (free cycles)
 #SBATCH -A vision-pulkitag-urops
 #SBATCH -t 2:00:00                                          # job time
 #SBATCH -n 1                                                # number of tasks
@@ -19,7 +19,8 @@ cd /data/scratch/rileyis/ki-rl/
 source .venv/bin/activate
 
 litgpt finetune_lora allenai/OLMo-2-1124-7B-Instruct \
+    --out_dir out/sft_wiki_20 \
     --data JSON \
-    --data.json_path data/wiki_1k_questions.jsonl \
+    --data.json_path data/wiki_20/olmo_questions.jsonl \
     --data.val_split_fraction 0.1 \
     --seed 42
