@@ -19,4 +19,4 @@ cd /data/scratch/rileyis/ki-rl/
 
 source .venv/bin/activate
 
-python eval.py
+python data/generate_questions.py

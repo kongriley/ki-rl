@@ -118,7 +118,7 @@ def process_batch_results(batch_results):
 
 def pipeline(data, model="gpt-5-mini"):
     batch_requests = prepare_batch_requests(data, model=model)
-    batch_file_path = create_batch_file(batch_requests, filename=f"data/batch_requests_{model}.jsonl")
+    batch_file_path = create_batch_file(batch_requests, filename=f"batch_requests_{model}.jsonl")
     batch_id = submit_batch(batch_file_path)
     batch_job = wait_for_batch_completion(batch_id)
     batch_results = download_batch_results(batch_job)

@@ -1,6 +1,15 @@
 .venv
 .env
 
-data
+__pycache__
+
+data/**
+!data/**.py
+
 checkpoints
 out
+archive/**
+
+prompt-distillation
+
+OLMo-2-1124-7B-Instruct-SFT/

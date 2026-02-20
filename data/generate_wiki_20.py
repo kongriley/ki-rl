@@ -4,7 +4,7 @@ import urllib.parse
 from tqdm import tqdm
 import json
 
-wiki_1k = load_from_disk("data/wiki_1k")
+wiki_1k = load_from_disk("wiki_1k")
 
 good_titles = {
     "Dave Sands",
@@ -40,5 +40,5 @@ for i, example in enumerate(tqdm(wiki_1k)):
 print(len(out_dataset))
 print(good_titles - used_titles)
 
-with open('data/wiki_20/data.json', 'w') as f:
+with open('wiki_20/data.json', 'w') as f:
     json.dump(out_dataset, f)
