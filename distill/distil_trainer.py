@@ -1417,13 +1417,16 @@ class DistilTrainer(BaseTrainer):
         rewards = torch.zeros_like(completion_ids, dtype=torch.float32)
         advantages = rewards
 
-        # Slice to keep only the local part of the data
-        process_slice = slice(
-            self.accelerator.process_index * len(prompts),
-            (self.accelerator.process_index + 1) * len(prompts),
-        )
-        all_process_advantages = advantages.clone()  # keep the aggregated advantages for logging
-        advantages = advantages[process_slice]
+        # Keep a copy for logging. In some code paths `advantages` is already local-per-rank
+        # (e.g. vLLM colocate), so slicing by global process index would empty non-zero ranks.
+        all_process_advantages = advantages.clone()
+        expected_global_rows = len(prompts) * self.accelerator.num_processes
+        if advantages.size(0) == expected_global_rows:
+            process_slice = slice(
+                self.accelerator.process_index * len(prompts),
+                (self.accelerator.process_index + 1) * len(prompts),
+            )
+            advantages = advantages[process_slice]
 
         # Log prompt and completion texts
         self._logs["prompt"].extend(gather_object(prompts_text))

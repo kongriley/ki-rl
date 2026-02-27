@@ -19,7 +19,7 @@ def parse_args():
                     help="Backend for the judge (defaults to --backend)")
     p.add_argument("--data_path", type=str, default="data/wiki_20/data.json")
     p.add_argument("--questions_path", type=str,
-                    default="data/wiki_20/gpt-5-mini_questions_free_response.jsonl")
+                    default="data/wiki_20/gpt-5-mini_questions.jsonl")
     p.add_argument("--icl", action="store_true",
                     help="ICL evaluation: ask questions with providing the passage")
     p.add_argument("--max_new_tokens", type=int, default=256)

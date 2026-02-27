@@ -2,9 +2,9 @@ from distil_trainer import DistilTrainer
 from distil_config import DistilConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import os
+import re
 import torch
 from datasets import Dataset
-from string import Template
 import argparse
 from typing import List
 
@@ -18,7 +18,7 @@ def parse_args():
         "--base_model_name",
         type=str,
         default="allenai/OLMo-2-1124-7B-Instruct",
-        help="Base model (student init). Also default for question model and judge if not provided.",
+        help="Base model (student init). Also default for question model and teacher if not provided.",
     )
     parser.add_argument("--learning_rate", type=float, default=1e-5,
                         help="Learning rate")
@@ -33,7 +33,7 @@ def parse_args():
 
     # Question generation (GRPO)
     parser.add_argument("--question_model_name", type=str, default=None, help="Question generator model to optimize (defaults to base).")
-    parser.add_argument("--judge_model_name", type=str, default=None, help="Judge/teacher model for question quality + answer correctness (defaults to base).")
+    parser.add_argument("--teacher_model_name", type=str, default=None, help="Teacher model for student distillation reference (defaults to base).")
     parser.add_argument("--qg_max_steps", type=int, default=200, help="GRPO max steps for question generator.")
     parser.add_argument("--qg_learning_rate", type=float, default=5e-6, help="GRPO learning rate for question generator.")
     parser.add_argument("--qg_num_generations", type=int, default=4, help="GRPO num_generations for question generator.")
@@ -48,7 +48,7 @@ def parse_args():
 
     # Two-loop settings
     parser.add_argument("--outer_iters", type=int, default=3, help="Number of outer/inner alternations.")
-    parser.add_argument("--inner_epochs_per_iter", type=int, default=1, help="Student distillation epochs per iteration.")
+    parser.add_argument("--inner_epochs_per_iter", type=int, default=3, help="Student distillation epochs per iteration.")
     return parser.parse_args()
 
 def load_dataset(path, test_size=0.1, tokenizer=None):
@@ -61,6 +61,9 @@ def load_dataset(path, test_size=0.1, tokenizer=None):
         dataset = Dataset.from_json(path)
     
     print(f"Loaded dataset with {len(dataset)} examples")
+    
+    if test_size == 0.0:
+        return dataset, None
     
     # Split into train and test
     split_dataset = dataset.train_test_split(test_size=test_size, seed=42)
@@ -86,7 +89,7 @@ if __name__ == "__main__":
     dataset_raw, _ = load_dataset(dataset_path, test_size=0.0, tokenizer=tokenizer)
 
     question_model_name = args.question_model_name or model_name
-    judge_model_name = args.judge_model_name or model_name
+    teacher_model_name = args.teacher_model_name or model_name
 
     texts = _extract_texts_for_questioning(
         dataset_raw,
@@ -98,7 +101,9 @@ if __name__ == "__main__":
     qd_cfg = QuestionThenDistillConfig(
         questions_per_text=args.questions_per_text,
         qg_max_question_new_tokens=args.max_question_new_tokens,
-        teacher_answer_max_new_tokens=args.max_teacher_answer_new_tokens,
+        qg_max_prompt_length=1024,
+        qg_temperature=args.qg_temperature,
+        qg_top_p=args.qg_top_p,
     )
 
     # Two-loop: alternate (outer) question optimization (GRPO) and (inner) student distillation.
@@ -106,7 +111,6 @@ if __name__ == "__main__":
 
     current_student_path = model_name
     current_question_model_path = question_model_name
-    teacher_model_name = judge_model_name
 
     for it in range(args.outer_iters):
         # Outer loop: train question generator to minimize student success.
@@ -127,15 +131,16 @@ if __name__ == "__main__":
             logging_steps=10,
             seed=0,
             device=None,
-            judge_model=judge_model_name,
-            student_model=current_student_path,
-            teacher_answer_model=teacher_model_name,
+            reward_max_answer_new_tokens=args.max_teacher_answer_new_tokens,
         )
 
         q_trainer = QuestionGeneratorGRPOTrainer(
             question_model=current_question_model_path,
             question_tokenizer=None,
             config=qg_cfg,
+            reward_student_model=current_student_path,
+            reward_teacher_model=teacher_model_name,
+            reward_tokenizer=None,
         )
         q_trainer.train(texts)
 
@@ -145,20 +150,10 @@ if __name__ == "__main__":
         current_question_model_path = qg_dir
 
         # Build distillation dataset for this iteration.
-        teacher_answer_model = AutoModelForCausalLM.from_pretrained(
-            teacher_model_name, torch_dtype=torch.bfloat16
-        ).to(q_trainer.device)
-        teacher_answer_model.eval()
-        teacher_answer_tok = AutoTokenizer.from_pretrained(teacher_model_name, padding_side="left")
-        if teacher_answer_tok.pad_token is None:
-            teacher_answer_tok.pad_token = teacher_answer_tok.eos_token
-
         dataset = build_question_distillation_dataset(
             texts=texts,
             question_model=q_trainer.q_model,
             question_tokenizer=q_trainer.q_tok,
-            teacher_answer_model=teacher_answer_model,
-            teacher_answer_tokenizer=teacher_answer_tok,
             cfg=qd_cfg,
         )
 

@@ -19,4 +19,5 @@ cd /data/scratch/rileyis/ki-rl/
 
 source .venv/bin/activate
 
-python data/generate_questions.py
+export NCCL_P2P_DISABLE=1 
+accelerate launch distill/distill_from_questions.py --use_vllm

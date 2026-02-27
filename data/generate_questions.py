@@ -13,7 +13,7 @@ def parse_args():
                         help="LLM backend to use (default: openai)")
     parser.add_argument("--model", default=None,
                         help="Model name (default: per-backend default)")
-    parser.add_argument("--output-dir", default="data/wiki_20",
+    parser.add_argument("--output-dir", default="/data/scratch/rileyis/ki-rl/data/wiki_20",
                         help="Output directory")
     parser.add_argument("--questions-per-example", type=int, default=5)
     parser.add_argument("--questions-per-prompt", type=int, default=1)
@@ -24,7 +24,7 @@ def create_question_prompt(data_content: str, num_questions=10) -> str:
     return f"""
     Using the following data, generate {num_questions} free-response question{'' if num_questions == 1 else 's'} about the data.
     These questions will be used in a separate examination in two weeks, where the students are not given the data, so be clear about the context, but do not explicitly reference the data in the questions.
-    The answers should be answerable solely based on the information in the data.
+    The answers should be answerable solely based on the information in the data. However, if the student has never seen the data before, the answer should not be answerable (i.e. it should not contain extraneous information that is not in the data).
 
     The questions should be in the following format:
 
