@@ -94,13 +94,15 @@ def generate_hf(model, tokenizer, messages, max_new_tokens=256, temperature=0.0)
 
 def _openai_client():
     from openai import OpenAI
-    return OpenAI()
+    import dotenv
+    dotenv.load_dotenv()
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def generate_openai(client, model, messages, max_tokens=256, temperature=0.0):
     resp = client.chat.completions.create(
         model=model, messages=messages,
-        max_tokens=max_tokens, temperature=temperature,
+        # max_completion_tokens=max_tokens
     )
     return resp.choices[0].message.content.strip()
 
@@ -114,7 +116,7 @@ def judge_openai(client, model, question, gold, answer):
         {"role": "system", "content": JUDGE_SYSTEM},
         {"role": "user", "content": build_judge_prompt(question, gold, answer)},
     ]
-    verdict = generate_openai(client, model, messages, max_tokens=8, temperature=0.0)
+    verdict = generate_openai(client, model, messages, temperature=0.0)
     return parse_verdict(verdict)
 
 
