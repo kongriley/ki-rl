@@ -2,11 +2,11 @@ import argparse
 import json
 import os
 from typing import Dict
-
 import torch
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from vllm import LLM, SamplingParams
 from trl import GRPOConfig, GRPOTrainer
 
 from distil_config import DistilConfig
@@ -17,10 +17,12 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_generation_iterations", type=int, default=3, help="Number of times to run the generation loop")
-    p.add_argument("--num_question_generations", type=int, default=1, help="Number of questions to generate for each passage")
+    p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage")
     p.add_argument("--dataset_path", default="/data/scratch/rileyis/ki-rl/data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--output_dir", default="/data/scratch/rileyis/ki-rl/distill/out/grpo_distill")
+    p.add_argument("--question_model_path", type=str, default=None,
+                   help="Path to a pre-trained question model. Skips question generator training and uses this model directly for question generation.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_train_epochs", type=float, default=1)
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
@@ -60,21 +62,35 @@ def build_question_prompt_dataset(dataset: Dict) -> Dataset:
         question_prompt_dataset.append({"id": id, "prompt": prompt})
     return Dataset.from_list(question_prompt_dataset)
 
-@torch.no_grad()
-def generate_questions(question_model, tokenizer, dataset: Dict, num_question_generations: int, temperature: float = 0.7) -> list:
-    questions = []
+def generate_questions(model_name_or_path: str, tokenizer_name: str, dataset: Dict, num_question_generations: int, temperature: float = 1.2) -> list:
+    llm = LLM(
+        model=model_name_or_path,
+        tokenizer=tokenizer_name,
+        dtype="bfloat16",
+        max_model_len=4096,
+        gpu_memory_utilization=0.9,
+    )
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=1024,
+        n=num_question_generations,
+    )
+
+    prompts = []
+    ids = []
     for id, text in dataset.items():
-        prompt = _create_question_prompt(text)
-        inputs = tokenizer(
-            [prompt] * num_question_generations,
-            padding=True, truncation=True, max_length=3072, return_tensors="pt",
-        ).to(question_model.device)
-        outputs = question_model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=temperature)
-        generated = tokenizer.batch_decode(
-            outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True,
-        )
-        del inputs, outputs
-        questions.extend({"id": id, "question": q} for q in generated)
+        prompts.append(_create_question_prompt(text))
+        ids.append(id)
+
+    outputs = llm.generate(prompts, sampling_params)
+
+    questions = []
+    for output, id in zip(outputs, ids):
+        for completion in output.outputs:
+            questions.append({"id": id, "question": completion.text})
+
+    del llm
+    torch.cuda.empty_cache()
     return questions
 
 def _build_prompt(question: str) -> str:
@@ -86,9 +102,9 @@ def _build_teacher_prompt(question: str, document: str) -> str:
         f"<Passage>\n{document}\n\n"
     ) + _build_prompt(question)
 
-def build_question_dataset(question_model, tokenizer, dataset: Dict, num_question_generations: int) -> Dataset:
+def build_question_dataset(model_name_or_path: str, tokenizer_name: str, dataset: Dict, num_question_generations: int) -> Dataset:
     question_dataset = []
-    questions = generate_questions(question_model, tokenizer, dataset, num_question_generations)
+    questions = generate_questions(model_name_or_path, tokenizer_name, dataset, num_question_generations)
     for row in questions:   
         id, question = row["id"], row["question"]
         prompt = _build_prompt_conversation(_build_prompt(question))
@@ -134,34 +150,36 @@ if __name__ == "__main__":
     dataset = load_dataset(args.dataset_path)
     assert len(dataset) > 0, "No dataset loaded"
 
-    question_model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
-        torch_dtype=torch.bfloat16,
-    )
+    skip_question_training = args.question_model_path is not None
 
-    # TODO: modify question params
-    question_config = GRPOConfig(
-        seed=args.seed,
-        use_vllm=True,
-        vllm_mode="colocate",
-        vllm_tensor_parallel_size=1, 
-        vllm_gpu_memory_utilization=0.3,
-        vllm_enable_sleep_mode=False,
-        learning_rate=args.learning_rate,
-        warmup_ratio = 0.1,
-        lr_scheduler_type = "cosine",
-        logging_steps = 1,
-        bf16 = True,
-        fp16 = False,
-        per_device_train_batch_size = 1,
-        gradient_accumulation_steps = args.gradient_accumulation_steps,
-        num_generations=16,
-        max_steps=100,
-        max_prompt_length=3072,
-        max_completion_length=1024,
-        num_train_epochs = 2,
-        report_to = "none",
-    )
+    if not skip_question_training:
+        question_model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.bfloat16,
+        )
+
+        question_config = GRPOConfig(
+            seed=args.seed,
+            use_vllm=True,
+            vllm_mode="colocate",
+            vllm_tensor_parallel_size=1, 
+            vllm_gpu_memory_utilization=0.3,
+            vllm_enable_sleep_mode=False,
+            learning_rate=args.learning_rate,
+            warmup_ratio = 0.1,
+            lr_scheduler_type = "cosine",
+            logging_steps = 1,
+            bf16 = True,
+            fp16 = False,
+            per_device_train_batch_size = 1,
+            gradient_accumulation_steps = args.gradient_accumulation_steps,
+            num_generations=16,
+            max_steps=100,
+            max_prompt_length=3072,
+            max_completion_length=1024,
+            num_train_epochs = 2,
+            report_to = "none",
+        )
 
     student_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
@@ -195,7 +213,6 @@ if __name__ == "__main__":
         num_train_epochs = args.num_train_epochs,
         save_steps = 100,
         max_grad_norm = 1,
-        # report_to = "wandb",
         report_to = None,
         output_dir = args.output_dir,
         log_completions = True, # True for debugging
@@ -209,63 +226,69 @@ if __name__ == "__main__":
         teacher_model.to("cpu")
         torch.cuda.empty_cache()
 
-        question_prompt_dataset = build_question_prompt_dataset(dataset)
-        print(f"Question prompt dataset length: {len(question_prompt_dataset)}")
-        assert len(question_prompt_dataset) > 0, "No question prompts generated"
+        if not skip_question_training:
+            question_prompt_dataset = build_question_prompt_dataset(dataset)
+            print(f"Question prompt dataset length: {len(question_prompt_dataset)}")
+            assert len(question_prompt_dataset) > 0, "No question prompts generated"
 
-        @torch.no_grad()
-        # TODO: judge currently is the student model itself. This should be changed to a separate model.
-        def reward_question_difficulty(completions, **kwargs) -> float:
-            questions = [_normalize_completion_text(c) for c in completions]
-            rewards = []
-            sub_batch = 4
-            for start in range(0, len(questions), sub_batch):
-                batch_qs = questions[start:start + sub_batch]
+            @torch.no_grad()
+            # TODO: judge currently is the student model itself. This should be changed to a separate model.
+            def reward_question_difficulty(completions, **kwargs) -> float:
+                questions = [_normalize_completion_text(c) for c in completions]
+                rewards = []
+                sub_batch = 4
+                for start in range(0, len(questions), sub_batch):
+                    batch_qs = questions[start:start + sub_batch]
 
-                student_inputs = tokenizer(
-                    [_build_prompt(q) for q in batch_qs],
-                    padding=True, truncation=True, max_length=1024, return_tensors="pt", padding_side="left",
-                ).to(student_model.device)
-                student_out = student_model.generate(**student_inputs, max_new_tokens=256)
-                student_answers = tokenizer.batch_decode(
-                    student_out[:, student_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
-                )
+                    student_inputs = tokenizer(
+                        [_build_prompt(q) for q in batch_qs],
+                        padding=True, truncation=True, max_length=1024, return_tensors="pt", padding_side="left",
+                    ).to(student_model.device)
+                    student_out = student_model.generate(**student_inputs, max_new_tokens=256)
+                    student_answers = tokenizer.batch_decode(
+                        student_out[:, student_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
+                    )
 
-                judge_inputs = tokenizer(
-                    [_build_judge_prompt(q, a) for q, a in zip(batch_qs, student_answers)],
-                    padding=True, truncation=True, max_length=2048, return_tensors="pt", padding_side="left",
-                ).to(student_model.device)
-                judge_out = student_model.generate(**judge_inputs, max_new_tokens=16)
-                verdicts = tokenizer.batch_decode(
-                    judge_out[:, judge_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
-                )
+                    judge_inputs = tokenizer(
+                        [_build_judge_prompt(q, a) for q, a in zip(batch_qs, student_answers)],
+                        padding=True, truncation=True, max_length=2048, return_tensors="pt", padding_side="left",
+                    ).to(student_model.device)
+                    judge_out = student_model.generate(**judge_inputs, max_new_tokens=16)
+                    verdicts = tokenizer.batch_decode(
+                        judge_out[:, judge_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
+                    )
 
-                rewards.extend(
-                    -1.0 if v.strip().lower().startswith("correct") else 0.0
-                    for v in verdicts
-                )
-            return rewards
-        
-        def reward_toy(completions, **kwargs) -> float:
-            return [len(c) for c in completions]
+                    rewards.extend(
+                        -1.0 if v.strip().lower().startswith("correct") else 0.0
+                        for v in verdicts
+                    )
+                return rewards
 
-        question_trainer = GRPOTrainer(
-            model=question_model,
-            args=question_config,
-            train_dataset=question_prompt_dataset,
-            reward_funcs=reward_question_difficulty,
-            # reward_funcs=reward_toy,
-        )
-        question_trainer.train()
-        question_model_dir = os.path.join(args.output_dir, f"question_model_{i}")
-        question_model.save_pretrained(question_model_dir)
-        print(f"Saved question model to: {question_model_dir}")
+            question_trainer = GRPOTrainer(
+                model=question_model,
+                args=question_config,
+                train_dataset=question_prompt_dataset,
+                reward_funcs=reward_question_difficulty,
+            )
+            question_trainer.train()
+            question_model_dir = os.path.join(args.output_dir, f"question_model_{i}")
+            question_model.save_pretrained(question_model_dir)
+            tokenizer.save_pretrained(question_model_dir)
+            print(f"Saved question model to: {question_model_dir}")
+            question_gen_path = question_model_dir
+            question_model.to("cpu")
+        else:
+            question_gen_path = args.question_model_path
 
-        question_dataset = build_question_dataset(question_model, tokenizer, dataset, args.num_question_generations)
+        student_model.to("cpu")
+        torch.cuda.empty_cache()
+
+        print(f"Building question dataset using vLLM from: {question_gen_path}")
+        question_dataset = build_question_dataset(question_gen_path, args.model_name, dataset, args.num_question_generations)
         print(f"Question dataset length: {len(question_dataset)}")
         assert len(question_dataset) > 0, "No questions generated"
 
-        teacher_model.to("cuda")
+        student_model.to("cuda")
 
         student_trainer = DistilTrainer(
             model=student_model,

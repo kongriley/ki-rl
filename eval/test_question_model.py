@@ -5,7 +5,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, "/data/scratch/rileyis/ki-rl/distill")
-from main import load_dataset, generate_questions, _build_prompt
+from main import load_dataset, generate_questions, _build_prompt, _build_judge_prompt
 
 
 @torch.no_grad()
@@ -20,6 +20,20 @@ def answer_questions(model, tokenizer, questions, max_new_tokens=256):
         answer = tokenizer.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
         answers.append(answer)
     return answers
+
+
+@torch.no_grad()
+def judge_answers(model, tokenizer, questions, answers):
+    verdicts = []
+    for q, a in zip(questions, answers):
+        inputs = tokenizer(
+            _build_judge_prompt(q["question"], a),
+            return_tensors="pt", truncation=True, max_length=2048,
+        ).to(model.device)
+        out = model.generate(**inputs, max_new_tokens=16)
+        verdict = tokenizer.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+        verdicts.append(verdict)
+    return verdicts
 
 
 def main():
@@ -56,8 +70,12 @@ def main():
     student.eval()
 
     answers = answer_questions(student, tokenizer, questions)
+    verdicts = judge_answers(student, tokenizer, questions, answers)
 
-    for q, a in zip(questions, answers):
+    num_correct = sum(1 for v in verdicts if v.lower().startswith("correct"))
+    print(f"\nOverall: {num_correct}/{len(verdicts)} correct ({num_correct/len(verdicts):.0%})")
+
+    for q, a, v in zip(questions, answers, verdicts):
         print(f"\n{'='*80}")
         if args.full_passage:
             print(f"PASSAGE [{q['id']}]\n{dataset[q['id']]}")
@@ -66,6 +84,7 @@ def main():
             print(f"PASSAGE [{q['id']}]: {passage_preview}...")
         print(f"  Q: {q['question']}")
         print(f"  A: {a}")
+        print(f"  Judge: {v}")
 
 
 if __name__ == "__main__":
