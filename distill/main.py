@@ -1,7 +1,8 @@
 import argparse
 import json
 import os
-from typing import Dict
+import re
+from typing import Dict, Tuple
 import torch
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -41,18 +42,30 @@ Question generation functions
 
 def _create_question_prompt(text: str) -> str:
     return f"""
-    Using the following passage, generate one free-response question about the passage.
+    Using the following passage, generate one free-response question about the passage, along with its answer.
     This question will be used in a separate examination in two weeks, where the students are not given the passage, so be clear about the context, but do not explicitly reference the passage in the question.
     The answers should be answerable solely based on the information in the passage. However, if the student has never seen the passage before, the answer should not be answerable (i.e. it should not contain extraneous information that is not in the passage).
+
+    Format your response as:
+    Question: <your question>
+    Answer: <the answer>
 
     <Passage>
     {text}
 
-    <Question>
+    <Response>
     """
 
 def _build_prompt_conversation(prompt: str):
     return [{"role": "user", "content": prompt}]
+
+def _parse_question_answer(text: str) -> Tuple[str, str]:
+    """Extract (question, answer) from generated text with 'Question:' / 'Answer:' prefixes."""
+    q_match = re.search(r"Question:\s*(.+?)(?:\nAnswer:|\Z)", text, re.DOTALL)
+    a_match = re.search(r"Answer:\s*(.+)", text, re.DOTALL)
+    question = q_match.group(1).strip() if q_match else text.strip()
+    answer = a_match.group(1).strip() if a_match else ""
+    return question, answer
 
 def build_question_prompt_dataset(dataset: Dict) -> Dataset:
     question_prompt_dataset = []
@@ -87,7 +100,8 @@ def generate_questions(model_name_or_path: str, tokenizer_name: str, dataset: Di
     questions = []
     for output, id in zip(outputs, ids):
         for completion in output.outputs:
-            questions.append({"id": id, "question": completion.text})
+            question, answer = _parse_question_answer(completion.text)
+            questions.append({"id": id, "question": question, "answer": answer})
 
     del llm
     torch.cuda.empty_cache()
@@ -105,23 +119,23 @@ def _build_teacher_prompt(question: str, document: str) -> str:
 def build_question_dataset(model_name_or_path: str, tokenizer_name: str, dataset: Dict, num_question_generations: int) -> Dataset:
     question_dataset = []
     questions = generate_questions(model_name_or_path, tokenizer_name, dataset, num_question_generations)
-    for row in questions:   
-        id, question = row["id"], row["question"]
+    for row in questions:
+        id, question, answer = row["id"], row["question"], row["answer"]
         prompt = _build_prompt_conversation(_build_prompt(question))
         teacher_prompt = _build_prompt_conversation(_build_teacher_prompt(question, dataset[id]))
-        question_dataset.append({"id": id, "prompt": prompt, "teacher_prompt": teacher_prompt, "question": question})
+        question_dataset.append({"id": id, "prompt": prompt, "teacher_prompt": teacher_prompt, "question": question, "answer": answer})
     return Dataset.from_list(question_dataset)
 
-# TODO: add passage
-def _build_judge_prompt(question: str, answer: str) -> str:
+def _build_judge_prompt(question: str, reference_answer: str, student_answer: str) -> str:
     return (
-        "You are an impartial judge. Decide whether the student's answer is "
-        "correct compared to the reference. The wording need not match exactly, "
+        "You are an impartial judge. Decide whether the student's answer agrees with "
+        "the reference answer. The wording need not match exactly, "
         "but all key facts must be present and accurate. "
         "Respond with ONLY the single word 'correct' or 'incorrect'."
         "\n\n"
         f"<Question>\n{question}\n\n"
-        f"<Student's Answer>\n{answer}\n\n"
+        f"<Reference Answer>\n{reference_answer}\n\n"
+        f"<Student's Answer>\n{student_answer}\n\n"
         "<Verdict>"
     )
 
@@ -164,7 +178,7 @@ if __name__ == "__main__":
             vllm_mode="colocate",
             vllm_tensor_parallel_size=1, 
             vllm_gpu_memory_utilization=0.3,
-            vllm_enable_sleep_mode=False,
+            vllm_enable_sleep_mode=True,
             learning_rate=args.learning_rate,
             warmup_ratio = 0.1,
             lr_scheduler_type = "cosine",
@@ -179,6 +193,8 @@ if __name__ == "__main__":
             max_completion_length=1024,
             num_train_epochs = 2,
             report_to = "none",
+            gradient_checkpointing=True,
+            optim="adamw_8bit",
         )
 
     student_model = AutoModelForCausalLM.from_pretrained(
@@ -188,7 +204,8 @@ if __name__ == "__main__":
     teacher_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
-    ).to("cuda")
+    )
+    judge_model = student_model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -215,30 +232,36 @@ if __name__ == "__main__":
         max_grad_norm = 1,
         report_to = None,
         output_dir = args.output_dir,
-        log_completions = True, # True for debugging
+        log_completions = True,
         sync_ref_model = True,
         ref_model_sync_steps = 1,
         ref_model_mixup_alpha = 0.0,
         vllm_importance_sampling_correction = True,
+        gradient_checkpointing=True,
+        optim="adamw_8bit",
     )
 
     for i in range(args.num_generation_iterations):
-        teacher_model.to("cpu")
-        torch.cuda.empty_cache()
-
+        # ── Phase 1: Question model training (GRPO) ──
+        # Student stays on GPU for reward fn inference. The GRPOTrainer's
+        # colocated vLLM sleeps after generation, freeing ~60 GB before
+        # the reward function runs, so there's plenty of room.
         if not skip_question_training:
             question_prompt_dataset = build_question_prompt_dataset(dataset)
             print(f"Question prompt dataset length: {len(question_prompt_dataset)}")
             assert len(question_prompt_dataset) > 0, "No question prompts generated"
 
             @torch.no_grad()
-            # TODO: judge currently is the student model itself. This should be changed to a separate model.
             def reward_question_difficulty(completions, **kwargs) -> float:
-                questions = [_normalize_completion_text(c) for c in completions]
+                raw_texts = [_normalize_completion_text(c) for c in completions]
+                parsed = [_parse_question_answer(t) for t in raw_texts]
+                questions = [q for q, _ in parsed]
+                ref_answers = [a for _, a in parsed]
                 rewards = []
                 sub_batch = 4
                 for start in range(0, len(questions), sub_batch):
                     batch_qs = questions[start:start + sub_batch]
+                    batch_refs = ref_answers[start:start + sub_batch]
 
                     student_inputs = tokenizer(
                         [_build_prompt(q) for q in batch_qs],
@@ -250,10 +273,10 @@ if __name__ == "__main__":
                     )
 
                     judge_inputs = tokenizer(
-                        [_build_judge_prompt(q, a) for q, a in zip(batch_qs, student_answers)],
+                        [_build_judge_prompt(q, ref, sa) for q, ref, sa in zip(batch_qs, batch_refs, student_answers)],
                         padding=True, truncation=True, max_length=2048, return_tensors="pt", padding_side="left",
-                    ).to(student_model.device)
-                    judge_out = student_model.generate(**judge_inputs, max_new_tokens=16)
+                    ).to(judge_model.device)
+                    judge_out = judge_model.generate(**judge_inputs, max_new_tokens=16)
                     verdicts = tokenizer.batch_decode(
                         judge_out[:, judge_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
                     )
@@ -276,10 +299,17 @@ if __name__ == "__main__":
             tokenizer.save_pretrained(question_model_dir)
             print(f"Saved question model to: {question_model_dir}")
             question_gen_path = question_model_dir
+
+            # Clean up the GRPOTrainer and its colocated vLLM before next phase
+            del question_trainer
             question_model.to("cpu")
+            torch.cuda.empty_cache()
         else:
             question_gen_path = args.question_model_path
 
+        # ── Phase 2: Generate question dataset (standalone vLLM) ──
+        # The standalone vLLM in generate_questions needs most of the GPU.
+        # Move models off GPU for this phase only.
         student_model.to("cpu")
         torch.cuda.empty_cache()
 
@@ -288,6 +318,9 @@ if __name__ == "__main__":
         print(f"Question dataset length: {len(question_dataset)}")
         assert len(question_dataset) > 0, "No questions generated"
 
+        # ── Phase 3: Distillation (DistilTrainer) ──
+        # Move student back to GPU; teacher stays on CPU and the trainer's
+        # accelerator.prepare_model handles placing it for forward passes.
         student_model.to("cuda")
 
         student_trainer = DistilTrainer(
@@ -300,6 +333,10 @@ if __name__ == "__main__":
         student_model_dir = os.path.join(args.output_dir, f"student_model_{i}")
         student_model.save_pretrained(student_model_dir)
         print(f"Saved student model to: {student_model_dir}")
+
+        # Clean up the DistilTrainer and its colocated vLLM before next iteration
+        del student_trainer
+        torch.cuda.empty_cache()
 
     final_student_model_dir = os.path.join(args.output_dir, "final_student_model")
     student_model.save_pretrained(final_student_model_dir)
