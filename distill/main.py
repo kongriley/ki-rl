@@ -18,9 +18,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_generation_iterations", type=int, default=3, help="Number of times to run the generation loop")
     p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage")
-    p.add_argument("--dataset_path", default="/data/scratch/rileyis/ki-rl/data/wiki_20/data.json")
+    p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
-    p.add_argument("--output_dir", default="/data/scratch/rileyis/ki-rl/distill/out/grpo_distill")
+    p.add_argument("--output_dir", default="./distill/out/grpo_distill")
     p.add_argument("--question_model_path", type=str, default=None,
                    help="Path to a pre-trained question model. Skips question generator training and uses this model directly for question generation.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
