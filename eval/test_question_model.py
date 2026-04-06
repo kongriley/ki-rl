@@ -1,51 +1,30 @@
 import argparse
+import json
+import os
 import sys
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-sys.path.insert(0, "/data/scratch/rileyis/ki-rl/distill")
-from main import load_dataset, generate_questions, _build_prompt, _build_judge_prompt
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "distill"))
+from main import load_dataset, generate_questions
 
-
-@torch.no_grad()
-def answer_questions(model, tokenizer, questions, max_new_tokens=256):
-    answers = []
-    for q in questions:
-        inputs = tokenizer(
-            _build_prompt(q["question"]),
-            return_tensors="pt", truncation=True, max_length=1024,
-        ).to(model.device)
-        out = model.generate(**inputs, max_new_tokens=max_new_tokens)
-        answer = tokenizer.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
-        answers.append(answer)
-    return answers
-
-
-@torch.no_grad()
-def judge_answers(model, tokenizer, questions, answers):
-    verdicts = []
-    for q, a in zip(questions, answers):
-        inputs = tokenizer(
-            _build_judge_prompt(q["question"], a),
-            return_tensors="pt", truncation=True, max_length=2048,
-        ).to(model.device)
-        out = model.generate(**inputs, max_new_tokens=16)
-        verdict = tokenizer.decode(out[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
-        verdicts.append(verdict)
-    return verdicts
+from inference import evaluate_qa
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/data/scratch/rileyis/ki-rl/distill/out/grpo_distill/question_model_0")
+    p.add_argument("--model", default="distill/out/grpo_distill/question_model_0")
     p.add_argument("--student_model", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--tokenizer", default="allenai/OLMo-2-1124-7B-Instruct")
-    p.add_argument("--dataset", default="/data/scratch/rileyis/ki-rl/data/wiki_20/data.json")
+    p.add_argument("--dataset", default="data/wiki_20/data.json")
     p.add_argument("--num_questions", type=int, default=3)
     p.add_argument("--temperature", type=float, default=1.2)
-    p.add_argument("--max_passages", type=int, default=5, help="0=all")
+    p.add_argument("--max_passages", type=int, default=None,
+                   help="Limit to first N passages (default: use all)")
     p.add_argument("--full_passage", action="store_true")
+    p.add_argument("--output", type=str, default=None,
+                   help="Save results to this JSON file")
     args = p.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, padding_side="left")
@@ -57,10 +36,12 @@ def main():
     model.eval()
 
     dataset = load_dataset(args.dataset)
-    if args.max_passages > 0:
+    if args.max_passages is not None:
         dataset = dict(list(dataset.items())[:args.max_passages])
 
-    questions = generate_questions(model, tokenizer, dataset, args.num_questions, args.temperature)
+    questions = generate_questions(
+        args.model, args.tokenizer, dataset, args.num_questions, temperature=args.temperature,
+    )
 
     del model
     torch.cuda.empty_cache()
@@ -69,22 +50,32 @@ def main():
     student = AutoModelForCausalLM.from_pretrained(args.student_model, torch_dtype=torch.bfloat16, device_map="auto")
     student.eval()
 
-    answers = answer_questions(student, tokenizer, questions)
-    verdicts = judge_answers(student, tokenizer, questions, answers)
+    summary = evaluate_qa(
+        student, student, tokenizer,
+        [q["question"] for q in questions],
+        [q["answer"] for q in questions],
+        ids=[q["id"] for q in questions],
+    )
 
-    num_correct = sum(1 for v in verdicts if v.lower().startswith("correct"))
-    print(f"\nOverall: {num_correct}/{len(verdicts)} correct ({num_correct/len(verdicts):.0%})")
+    print(f"\nOverall: {summary['correct']}/{summary['total']} correct "
+          f"({summary['accuracy']:.0%})")
 
-    for q, a, v in zip(questions, answers, verdicts):
+    for r, q in zip(summary["results"], questions):
         print(f"\n{'='*80}")
         if args.full_passage:
             print(f"PASSAGE [{q['id']}]\n{dataset[q['id']]}")
         else:
             passage_preview = dataset[q["id"]][:200]
             print(f"PASSAGE [{q['id']}]: {passage_preview}...")
-        print(f"  Q: {q['question']}")
-        print(f"  A: {a}")
-        print(f"  Judge: {v}")
+        print(f"  Q: {r['question']}")
+        print(f"  A: {r['student_answer']}")
+        print(f"  Judge: {r['verdict']}")
+
+    if args.output:
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\nSaved results to {args.output}")
 
 
 if __name__ == "__main__":

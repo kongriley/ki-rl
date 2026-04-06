@@ -7,6 +7,12 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from inference import (
+    build_student_prompt,
+    build_judge_prompt as _shared_build_judge_prompt,
+    parse_verdict,
+)
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Evaluate free-response questions (with or without context)")
@@ -52,24 +58,11 @@ def build_icl_prompt(article_text: str, question: str) -> str:
 
 
 def build_blind_prompt(question: str) -> str:
-    return f"Answer the following question.\n\nQuestion: {question}\n\nAnswer:"
-
-
-JUDGE_SYSTEM = (
-    "You are an impartial judge. Decide whether the student's answer is "
-    "correct compared to the reference. The wording need not match exactly, "
-    "but all key facts must be present and accurate. "
-    "Respond with ONLY the single word 'correct' or 'incorrect'."
-)
+    return build_student_prompt(question)
 
 
 def build_judge_prompt(question: str, gold: str, answer: str) -> str:
-    return (
-        f"Question: {question}\n\n"
-        f"Reference answer: {gold}\n\n"
-        f"Student's answer: {answer}\n\n"
-        "Verdict:"
-    )
+    return _shared_build_judge_prompt(question, gold, answer)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +106,6 @@ def generate_openai(client, model, messages, max_tokens=256, temperature=0.0):
 
 def judge_openai(client, model, question, gold, answer):
     messages = [
-        {"role": "system", "content": JUDGE_SYSTEM},
         {"role": "user", "content": build_judge_prompt(question, gold, answer)},
     ]
     verdict = generate_openai(client, model, messages, temperature=0.0)
@@ -122,17 +114,10 @@ def judge_openai(client, model, question, gold, answer):
 
 def judge_hf(model, tokenizer, question, gold, answer):
     messages = [
-        {"role": "system", "content": JUDGE_SYSTEM},
         {"role": "user", "content": build_judge_prompt(question, gold, answer)},
     ]
     verdict = generate_hf(model, tokenizer, messages, max_new_tokens=8, temperature=0.0)
     return parse_verdict(verdict)
-
-
-def parse_verdict(verdict: str) -> tuple[bool, str]:
-    v = verdict.lower().strip()
-    is_correct = "correct" in v and "incorrect" not in v
-    return is_correct, verdict
 
 
 # ---------------------------------------------------------------------------

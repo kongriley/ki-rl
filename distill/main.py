@@ -5,6 +5,7 @@ import math
 import multiprocessing as mp
 import os
 import re
+import sys
 from typing import Dict, List, Tuple
 import torch
 from datasets import Dataset
@@ -16,13 +17,25 @@ from trl import GRPOConfig, GRPOTrainer
 from distil_config import DistilConfig
 from distil_trainer import DistilTrainer
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "eval"))
+from inference import (
+    build_student_prompt,
+    build_teacher_prompt,
+    build_judge_prompt,
+    parse_verdict,
+    batch_generate_answers,
+    batch_generate_with_context,
+    batch_judge_answers,
+    evaluate_qa,
+)
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_generation_iterations", type=int, default=3, help="Number of times to run the generation loop")
-    p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage")
-    p.add_argument("--num_questions_per_generation", type=int, default=5, help="Number of questions to request per LLM completion")
+    p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
+    p.add_argument("--num_questions_per_generation", type=int, default=5, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--output_dir", default="./distill/out/grpo_distill")
@@ -33,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_train_epochs", type=float, default=3)
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
+    p.add_argument("--report_student_performance", action="store_true", default=True,
+                   help="Report student performance on the question dataset after distillation.")
     return p.parse_args()
 
 
@@ -49,8 +64,11 @@ Question generation functions
 def _create_question_prompt(text: str, num_questions: int = 1) -> str:
     return f"""
     Using the following passage, generate {num_questions} question{'' if num_questions == 1 else 's'} about the passage, along with their answers.
-    This question will be used in a separate examination in two weeks, where the students are not given the passage. Therefore, be clear about the context, but do not explicitly reference the passage in the question.
-    The answers should be answerable solely based on the information in the passage. However, if the student has never seen the passage before, the answer should not be answerable (i.e. it should not contain extraneous information that is not in the passage).
+    This question will be used in a separate examination in two weeks, where the students are not given the passage.
+
+    Each question must be fully self-contained and understandable on its own, without needing the passage for context. Include specific names, dates, and topics directly in the question so a reader can understand exactly what is being asked. It should also not contain extraneous information that is not in the passage.
+    - Bad: "Who was appointed after the resignation?" (unclear who or what)
+    - Good: "Who was appointed CEO of OpenAI after Sam Altman's brief resignation in November 2023?" (self-contained)
 
     Format your response as:
     Question 1: <your question>
@@ -147,13 +165,10 @@ def generate_questions(model_name_or_path: str, tokenizer_name: str, dataset: Di
     return questions
 
 def _build_prompt(question: str) -> str:
-    return f"<Question>\n{question}\n\n<Answer>"
+    return build_student_prompt(question)
 
 def _build_teacher_prompt(question: str, document: str) -> str:
-    return (
-        "Read the following passage carefully, then answer the question.\n\n"
-        f"<Passage>\n{document}\n\n"
-    ) + _build_prompt(question)
+    return build_teacher_prompt(question, document)
 
 def _run_generate_questions(args_and_queue):
     """Subprocess target: generates questions in a fresh CUDA context."""
@@ -188,17 +203,7 @@ def build_question_dataset(model_name_or_path: str, tokenizer_name: str, dataset
     return Dataset.from_list(question_dataset)
 
 def _build_judge_prompt(question: str, reference_answer: str, student_answer: str) -> str:
-    return (
-        "You are an impartial judge. Decide whether the student's answer agrees with "
-        "the reference answer. The wording need not match exactly, "
-        "but all key facts must be present and accurate. "
-        "Respond with ONLY the single word 'correct' or 'incorrect'."
-        "\n\n"
-        f"<Question>\n{question}\n\n"
-        f"<Reference Answer>\n{reference_answer}\n\n"
-        f"<Student's Answer>\n{student_answer}\n\n"
-        "<Verdict>"
-    )
+    return build_judge_prompt(question, reference_answer, student_answer)
 
 def _normalize_completion_text(completion) -> str:
     if isinstance(completion, str):
@@ -295,7 +300,7 @@ if __name__ == "__main__":
         max_grad_norm = 1,
         report_to = None,
         output_dir = args.output_dir,
-        log_completions = True,
+        # log_completions = True,
         sync_ref_model = True,
         ref_model_sync_steps = 1,
         ref_model_mixup_alpha = 0.0,
@@ -310,6 +315,7 @@ if __name__ == "__main__":
         # colocated vLLM sleeps after generation, freeing ~60 GB before
         # the reward function runs, so there's plenty of room.
         if not (i == 0 and args.skip_first_iteration) and not skip_question_training:
+            judge_model.to("cuda")
             question_prompt_dataset = build_question_prompt_dataset(dataset)
             print(f"Question prompt dataset length: {len(question_prompt_dataset)}")
             assert len(question_prompt_dataset) > 0, "No question prompts generated"
@@ -317,6 +323,12 @@ if __name__ == "__main__":
             _reward_call_count = [0]
 
             FORMAT_PENALTY = -2.0
+            PRESIDIO_PENALTY = -1.5
+            EASY_PENALTY = -1.0
+            GARBAGE_PENALTY = -0.5
+            GOOD_REWARD = 1.0
+            LENGTH_PENALTY = -0.3
+            MAX_QUESTION_LENGTH = 300
 
             @torch.no_grad()
             def reward_question_difficulty(completions, **kwargs) -> float:
@@ -326,64 +338,93 @@ if __name__ == "__main__":
                 questions = [q for q, _ in parsed]
                 ref_answers = [a for _, a in parsed]
 
+                passage_ids = kwargs.get("id", [None] * len(questions))
+
                 valid_mask = [_is_valid_qa(q, a) for q, a in zip(questions, ref_answers)]
                 valid_indices = [i for i, v in enumerate(valid_mask) if v]
                 valid_qs = [questions[i] for i in valid_indices]
                 valid_refs = [ref_answers[i] for i in valid_indices]
+                valid_ids = [passage_ids[i] for i in valid_indices]
 
                 rewards = [FORMAT_PENALTY] * len(questions)
-                all_student_answers = [""] * len(questions)
-                all_verdicts = ["[format_penalty]"] * len(questions)
+                all_closed_answers = [""] * len(questions)
+                all_open_answers = [""] * len(questions)
+                all_closed_verdicts = ["[format_penalty]"] * len(questions)
+                all_open_verdicts = ["[format_penalty]"] * len(questions)
+                all_reasons = ["format_penalty"] * len(questions)
 
                 if valid_qs:
-                    sub_batch = 4
-                    batch_rewards = []
-                    batch_student_answers = []
-                    batch_verdicts = []
-                    for start in range(0, len(valid_qs), sub_batch):
-                        batch_qs = valid_qs[start:start + sub_batch]
-                        batch_refs = valid_refs[start:start + sub_batch]
+                    presidio_mask = [
+                        "PRESIDIO_ANONYMIZED" in q or "PRESIDIO_ANONYMIZED" in a
+                        for q, a in zip(valid_qs, valid_refs)
+                    ]
+                    clean_indices = [j for j, is_p in enumerate(presidio_mask) if not is_p]
+                    clean_qs = [valid_qs[j] for j in clean_indices]
+                    clean_refs = [valid_refs[j] for j in clean_indices]
+                    clean_ids = [valid_ids[j] for j in clean_indices]
 
-                        student_inputs = tokenizer(
-                            [_build_prompt(q) for q in batch_qs],
-                            padding=True, truncation=True, max_length=1024, return_tensors="pt", padding_side="left",
-                        ).to(student_model.device)
-                        student_out = student_model.generate(**student_inputs, max_new_tokens=256)
-                        student_answers = tokenizer.batch_decode(
-                            student_out[:, student_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
+                    for j, is_p in enumerate(presidio_mask):
+                        if is_p:
+                            idx = valid_indices[j]
+                            rewards[idx] = PRESIDIO_PENALTY
+                            all_reasons[idx] = "presidio"
+
+                    if clean_qs:
+                        closed_answers = batch_generate_answers(
+                            student_model, tokenizer, clean_qs, batch_size=4,
+                        )
+                        closed_verdicts = batch_judge_answers(
+                            judge_model, tokenizer, clean_qs, clean_refs,
+                            closed_answers, batch_size=4,
                         )
 
-                        judge_inputs = tokenizer(
-                            [_build_judge_prompt(q, ref, sa) for q, ref, sa in zip(batch_qs, batch_refs, student_answers)],
-                            padding=True, truncation=True, max_length=2048, return_tensors="pt", padding_side="left",
-                        ).to(judge_model.device)
-                        judge_out = judge_model.generate(**judge_inputs, max_new_tokens=16)
-                        verdicts = tokenizer.batch_decode(
-                            judge_out[:, judge_inputs["input_ids"].shape[1]:], skip_special_tokens=True,
+                        clean_docs = [dataset[pid] for pid in clean_ids]
+                        open_answers = batch_generate_with_context(
+                            student_model, tokenizer, clean_qs, clean_docs, batch_size=4,
+                        )
+                        open_verdicts = batch_judge_answers(
+                            judge_model, tokenizer, clean_qs, clean_refs,
+                            open_answers, batch_size=4,
                         )
 
-                        batch_student_answers.extend(student_answers)
-                        batch_verdicts.extend(verdicts)
-                        batch_rewards.extend(
-                            -1.0 if v.strip().lower().startswith("correct") else 0.0
-                            for v in verdicts
-                        )
+                        for k, j in enumerate(clean_indices):
+                            idx = valid_indices[j]
+                            closed_correct, closed_text = closed_verdicts[k]
+                            open_correct, open_text = open_verdicts[k]
 
-                    for j, idx in enumerate(valid_indices):
-                        rewards[idx] = batch_rewards[j]
-                        all_student_answers[idx] = batch_student_answers[j]
-                        all_verdicts[idx] = batch_verdicts[j]
+                            all_closed_answers[idx] = closed_answers[k]
+                            all_open_answers[idx] = open_answers[k]
+                            all_closed_verdicts[idx] = closed_text
+                            all_open_verdicts[idx] = open_text
+
+                            if closed_correct:
+                                rewards[idx] = EASY_PENALTY
+                                all_reasons[idx] = "too_easy"
+                            elif open_correct:
+                                rewards[idx] = GOOD_REWARD
+                                all_reasons[idx] = "good_question"
+                            else:
+                                rewards[idx] = GARBAGE_PENALTY
+                                all_reasons[idx] = "garbage"
+
+                            if len(questions[idx]) > MAX_QUESTION_LENGTH:
+                                rewards[idx] += LENGTH_PENALTY
+                                all_reasons[idx] += "+long"
 
                 n_format_bad = sum(1 for v in valid_mask if not v)
                 n_samples = min(3, len(questions))
                 print(f"\n{'='*60}")
                 print(f"[Reward call #{_reward_call_count[0]}] Showing {n_samples}/{len(questions)} completions ({n_format_bad} format penalties):")
                 for j in range(n_samples):
-                    print(f"  --- Sample {j+1} {'[BAD FORMAT]' if not valid_mask[j] else ''} ---")
+                    tag = "[BAD FORMAT]" if not valid_mask[j] else ""
+                    print(f"  --- Sample {j+1} {tag} ---")
                     print(f"  Q: {questions[j][:200]}")
                     print(f"  Ref A: {ref_answers[j][:200]}")
-                    print(f"  Student A: {all_student_answers[j][:200]}")
-                    print(f"  Verdict: {all_verdicts[j].strip()} -> reward={rewards[j]}")
+                    print(f"  Closed-book A: {all_closed_answers[j][:200]}")
+                    print(f"  Closed verdict: {all_closed_verdicts[j]}")
+                    print(f"  Open-book A: {all_open_answers[j][:200]}")
+                    print(f"  Open verdict: {all_open_verdicts[j]}")
+                    print(f"  Reason: {all_reasons[j]} -> reward={rewards[j]}")
                 print(f"  Mean reward: {sum(rewards)/len(rewards):.3f}")
                 print(f"{'='*60}\n")
 
@@ -426,9 +467,9 @@ if __name__ == "__main__":
         assert len(question_dataset) > 0, "No questions generated"
 
         # ── Phase 3: Distillation (DistilTrainer) ──
-        # Move student and judge back to GPU.
+        # Only student goes back to GPU; judge is not used here and would
+        # compete with vLLM + ref_model for memory, causing OOM on wake_up().
         student_model.to("cuda")
-        judge_model.to("cuda")
 
         student_trainer = DistilTrainer(
             model=student_model,
@@ -446,6 +487,41 @@ if __name__ == "__main__":
         gc.collect()
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
+
+        if args.report_student_performance:
+            print("Reporting student performance on a fresh question dataset...")
+
+            # vLLM subprocess needs GPU memory
+            student_model.to("cpu")
+            judge_model.to("cpu")
+            gc.collect()
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+
+            eval_question_dataset = build_question_dataset(
+                question_gen_path, args.model_name, dataset,
+                100, args.num_questions_per_generation,
+            )
+            print(f"Evaluation question dataset length: {len(eval_question_dataset)}")
+            assert len(eval_question_dataset) > 0, "No evaluation questions generated"
+
+            student_model.to("cuda")
+            judge_model.to("cuda")
+
+            eval_summary = evaluate_qa(
+                student_model, judge_model, tokenizer,
+                eval_question_dataset["question"],
+                eval_question_dataset["answer"],
+                ids=eval_question_dataset["id"],
+            )
+            print(f"[Iteration {i}] Student accuracy: "
+                  f"{eval_summary['correct']}/{eval_summary['total']} "
+                  f"({eval_summary['accuracy']:.1%})")
+
+            results_path = os.path.join(args.output_dir, f"results_student_model_{i}.json")
+            with open(results_path, "w", encoding="utf-8") as f:
+                json.dump({"iteration": i, **eval_summary}, f, indent=2)
+            print(f"Saved evaluation results to: {results_path}")
 
     final_student_model_dir = os.path.join(args.output_dir, "final_student_model")
     student_model.save_pretrained(final_student_model_dir)
