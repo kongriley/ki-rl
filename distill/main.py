@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip_first_iteration", action="store_true", default=False,
                    help="Skip the first iteration of the question generation loop.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
-    p.add_argument("--num_train_epochs", type=float, default=1)
+    p.add_argument("--num_train_epochs", type=float, default=3)
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
     return p.parse_args()
 
@@ -265,7 +265,10 @@ if __name__ == "__main__":
         args.model_name,
         torch_dtype=torch.bfloat16,
     )
-    judge_model = student_model
+    judge_model = AutoModelForCausalLM.from_pretrained(
+        args.model_name,
+        torch_dtype=torch.bfloat16,
+    ).to("cuda")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -412,6 +415,7 @@ if __name__ == "__main__":
         # The standalone vLLM in generate_questions needs most of the GPU.
         # Move models off GPU for this phase only.
         student_model.to("cpu")
+        judge_model.to("cpu")
         gc.collect()
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
@@ -422,9 +426,9 @@ if __name__ == "__main__":
         assert len(question_dataset) > 0, "No questions generated"
 
         # ── Phase 3: Distillation (DistilTrainer) ──
-        # Move student back to GPU; teacher stays on CPU and the trainer's
-        # accelerator.prepare_model handles placing it for forward passes.
+        # Move student and judge back to GPU.
         student_model.to("cuda")
+        judge_model.to("cuda")
 
         student_trainer = DistilTrainer(
             model=student_model,
