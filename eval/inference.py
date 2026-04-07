@@ -34,6 +34,21 @@ def build_judge_prompt(question: str, reference_answer: str, student_answer: str
     )
 
 
+def format_instruct_user_prompt(tokenizer, user_message: str) -> str:
+    """Match DistilTrainer/TRL: one user message, then generation prompt.
+
+    Training uses ``maybe_apply_chat_template({"prompt": messages}, tokenizer)``
+    with ``add_generation_prompt=True`` when the last role is ``user``.
+    """
+    if getattr(tokenizer, "chat_template", None) is None:
+        return user_message
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": user_message}],
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Verdict parsing
 # ---------------------------------------------------------------------------
@@ -57,7 +72,7 @@ def batch_generate(
     max_new_tokens: int = 256,
     max_length: int = 1024,
 ) -> List[str]:
-    """Generate completions for a list of pre-built prompt strings."""
+    """Generate completions for a list of pre-built prompt strings (after chat template if used)."""
     all_outputs: List[str] = []
     for start in range(0, len(prompts), batch_size):
         batch = prompts[start : start + batch_size]
@@ -68,8 +83,12 @@ def batch_generate(
             max_length=max_length,
             return_tensors="pt",
             padding_side="left",
+            add_special_tokens=False,
         ).to(model.device)
-        out = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        gen_kwargs = dict(**inputs, max_new_tokens=max_new_tokens)
+        if tokenizer.pad_token_id is not None:
+            gen_kwargs.setdefault("pad_token_id", tokenizer.pad_token_id)
+        out = model.generate(**gen_kwargs)
         decoded = tokenizer.batch_decode(
             out[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
@@ -85,7 +104,9 @@ def batch_generate_answers(
     max_new_tokens: int = 256,
 ) -> List[str]:
     """Generate closed-book answers (no passage context)."""
-    prompts = [build_student_prompt(q) for q in questions]
+    prompts = [
+        format_instruct_user_prompt(tokenizer, build_student_prompt(q)) for q in questions
+    ]
     return batch_generate(model, tokenizer, prompts, batch_size=batch_size, max_new_tokens=max_new_tokens)
 
 
@@ -98,8 +119,18 @@ def batch_generate_with_context(
     max_new_tokens: int = 256,
 ) -> List[str]:
     """Generate open-book answers (with passage context)."""
-    prompts = [build_teacher_prompt(q, doc) for q, doc in zip(questions, documents)]
-    return batch_generate(model, tokenizer, prompts, batch_size=batch_size, max_new_tokens=max_new_tokens, max_length=4096)
+    prompts = [
+        format_instruct_user_prompt(tokenizer, build_teacher_prompt(q, doc))
+        for q, doc in zip(questions, documents)
+    ]
+    return batch_generate(
+        model,
+        tokenizer,
+        prompts,
+        batch_size=batch_size,
+        max_new_tokens=max_new_tokens,
+        max_length=4096,
+    )
 
 
 @torch.no_grad()
@@ -118,18 +149,23 @@ def batch_judge_answers(
         batch_refs = references[start : start + batch_size]
         batch_sas = student_answers[start : start + batch_size]
 
+        judge_texts = [
+            format_instruct_user_prompt(tokenizer, build_judge_prompt(q, ref, sa))
+            for q, ref, sa in zip(batch_qs, batch_refs, batch_sas)
+        ]
         inputs = tokenizer(
-            [
-                build_judge_prompt(q, ref, sa)
-                for q, ref, sa in zip(batch_qs, batch_refs, batch_sas)
-            ],
+            judge_texts,
             padding=True,
             truncation=True,
             max_length=2048,
             return_tensors="pt",
             padding_side="left",
+            add_special_tokens=False,
         ).to(model.device)
-        out = model.generate(**inputs, max_new_tokens=16)
+        gen_kwargs = dict(**inputs, max_new_tokens=16)
+        if tokenizer.pad_token_id is not None:
+            gen_kwargs.setdefault("pad_token_id", tokenizer.pad_token_id)
+        out = model.generate(**gen_kwargs)
         raw = tokenizer.batch_decode(
             out[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )

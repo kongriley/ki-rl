@@ -33,7 +33,7 @@ from inference import (
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--num_generation_iterations", type=int, default=3, help="Number of times to run the generation loop")
+    p.add_argument("--num_generation_iterations", type=int, default=5, help="Number of times to run the generation loop")
     p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
     p.add_argument("--num_questions_per_generation", type=int, default=5, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
@@ -44,13 +44,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip_first_iteration", action="store_true", default=False,
                    help="Skip the first iteration of the question generation loop.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
-    p.add_argument("--num_question_model_train_epochs", type=float, default=2)
-    p.add_argument("--num_train_epochs", type=float, default=3)
+    p.add_argument("--num_question_model_train_epochs", type=float, default=1)
+    p.add_argument("--num_train_epochs", type=float, default=1)
+    p.add_argument("--num_grpo_generations", type=int, default=8,
+                   help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
-    p.add_argument("--report_student_performance", action="store_true", default=True,
+    p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=True,
                    help="Report student performance on the question dataset after distillation.")
     p.add_argument("--log_student_completions", action="store_true", default=False)
-    p.add_argument("--save_question_model", action="store_true", default=False)
+    p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 and does not report student performance for debugging")
     return p.parse_args()
 
 
@@ -119,11 +122,17 @@ def _is_valid_qa(question: str, answer: str) -> bool:
 def generate_questions(model_name_or_path: str, tokenizer_name: str, dataset: Dict, num_question_generations: int, num_questions_per_generation: int = 5, temperature: float = 1.2, max_retries: int = 3) -> list:
     n = max(1, math.ceil(num_question_generations / num_questions_per_generation))
 
+    free_mem, total_mem = torch.cuda.mem_get_info()
+    free_frac = free_mem / total_mem
+    target_utilization = min(0.6, free_frac - 0.05)
+    target_utilization = max(target_utilization, 0.2)
+    print(f"  vLLM question gen: {free_mem/1e9:.1f}/{total_mem/1e9:.1f} GiB free "
+          f"({free_frac:.1%}), using gpu_memory_utilization={target_utilization:.2f}")
     llm_kwargs = dict(
         model=model_name_or_path,
         dtype="bfloat16",
         max_model_len=4096,
-        gpu_memory_utilization=0.6,
+        gpu_memory_utilization=target_utilization,
     )
     if tokenizer_name != model_name_or_path:
         llm_kwargs["tokenizer"] = tokenizer_name
@@ -258,7 +267,7 @@ if __name__ == "__main__":
             fp16 = False,
             per_device_train_batch_size = 1,
             gradient_accumulation_steps = args.gradient_accumulation_steps,
-            num_generations=16,
+            num_generations=args.num_grpo_generations,
             max_prompt_length=3072,
             max_completion_length=1024,
             num_train_epochs = args.num_question_model_train_epochs,
@@ -266,11 +275,13 @@ if __name__ == "__main__":
             gradient_checkpointing=True,
             optim="adamw_8bit",
         )
+        if args.debug:
+            question_config.max_steps = 1
 
     student_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
-    ).to("cuda")
+    )
     teacher_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
@@ -278,7 +289,7 @@ if __name__ == "__main__":
     judge_model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
-    ).to("cuda")
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -300,28 +311,26 @@ if __name__ == "__main__":
         gradient_accumulation_steps = args.gradient_accumulation_steps,
         max_prompt_length = 1024,
         max_completion_length = 1024,
-        max_steps = 1,
         num_train_epochs = args.num_train_epochs,
         save_steps = 100,
         max_grad_norm = 1,
-        report_to = None,
+        report_to = "none",
         output_dir = args.output_dir,
-        log_completions = args.log_student_completions,
-        sync_ref_model = True,
-        ref_model_sync_steps = 1,
-        ref_model_mixup_alpha = 0.0,
+        log_completions = args.log_student_completions and not args.debug,
+        sync_ref_model = False,
         vllm_importance_sampling_correction = True,
         gradient_checkpointing=True,
         optim="adamw_8bit",
     )
+    if args.debug:
+        distillation_config.max_steps = 1
 
     for i in range(args.num_generation_iterations):
         # ── Phase 1: Question model training (GRPO) ──
-        # Student stays on GPU for reward fn inference. The GRPOTrainer's
-        # colocated vLLM sleeps after generation, freeing ~60 GB before
-        # the reward function runs, so there's plenty of room.
+        # Student + judge stay on CPU except during the reward function.
+        # The reward fn moves them to GPU for inference, then back to CPU
+        # before returning so the backward pass has enough memory.
         if not (i == 0 and args.skip_first_iteration) and not skip_question_training:
-            judge_model.to("cuda")
             question_prompt_dataset = build_question_prompt_dataset(dataset)
             print(f"Question prompt dataset length: {len(question_prompt_dataset)}")
             assert len(question_prompt_dataset) > 0, "No question prompts generated"
@@ -335,6 +344,14 @@ if __name__ == "__main__":
             GOOD_REWARD = 1.0
             LENGTH_PENALTY = -0.3
             MAX_QUESTION_LENGTH = 300
+
+            def _swap_to_gpu(model):
+                torch.cuda.empty_cache()
+                model.to("cuda")
+
+            def _swap_to_cpu(model):
+                model.to("cpu")
+                torch.cuda.empty_cache()
 
             @torch.no_grad()
             def reward_question_difficulty(completions, **kwargs) -> float:
@@ -376,30 +393,54 @@ if __name__ == "__main__":
                             all_reasons[idx] = "presidio"
 
                     if clean_qs:
+                        _swap_to_gpu(student_model)
                         closed_answers = batch_generate_answers(
                             student_model, tokenizer, clean_qs, batch_size=4,
                         )
+                        _swap_to_cpu(student_model)
+
+                        _swap_to_gpu(judge_model)
                         closed_verdicts = batch_judge_answers(
                             judge_model, tokenizer, clean_qs, clean_refs,
                             closed_answers, batch_size=4,
                         )
+                        _swap_to_cpu(judge_model)
 
-                        clean_docs = [dataset[pid] for pid in clean_ids]
-                        open_answers = batch_generate_with_context(
-                            student_model, tokenizer, clean_qs, clean_docs, batch_size=4,
-                        )
-                        open_verdicts = batch_judge_answers(
-                            judge_model, tokenizer, clean_qs, clean_refs,
-                            open_answers, batch_size=4,
-                        )
+                        needs_open = [k for k, (correct, _) in enumerate(closed_verdicts) if not correct]
+                        open_qs = [clean_qs[k] for k in needs_open]
+                        open_refs = [clean_refs[k] for k in needs_open]
+                        open_docs = [dataset[clean_ids[k]] for k in needs_open]
+
+                        if open_qs:
+                            _swap_to_gpu(student_model)
+                            open_answers_subset = batch_generate_with_context(
+                                student_model, tokenizer, open_qs, open_docs, batch_size=4,
+                            )
+                            _swap_to_cpu(student_model)
+
+                            _swap_to_gpu(judge_model)
+                            open_verdicts_subset = batch_judge_answers(
+                                judge_model, tokenizer, open_qs, open_refs,
+                                open_answers_subset, batch_size=4,
+                            )
+                            _swap_to_cpu(judge_model)
+                        else:
+                            open_answers_subset = []
+                            open_verdicts_subset = []
+
+                        open_answers_full = [""] * len(clean_qs)
+                        open_verdicts_full = [("", "[skipped_easy]")] * len(clean_qs)
+                        for sub_k, orig_k in enumerate(needs_open):
+                            open_answers_full[orig_k] = open_answers_subset[sub_k]
+                            open_verdicts_full[orig_k] = open_verdicts_subset[sub_k]
 
                         for k, j in enumerate(clean_indices):
                             idx = valid_indices[j]
                             closed_correct, closed_text = closed_verdicts[k]
-                            open_correct, open_text = open_verdicts[k]
+                            open_correct, open_text = open_verdicts_full[k]
 
                             all_closed_answers[idx] = closed_answers[k]
-                            all_open_answers[idx] = open_answers[k]
+                            all_open_answers[idx] = open_answers_full[k]
                             all_closed_verdicts[idx] = closed_text
                             all_open_verdicts[idx] = open_text
 
@@ -449,17 +490,24 @@ if __name__ == "__main__":
                 tokenizer.save_pretrained(question_model_dir)
                 print(f"Saved question model to: {question_model_dir}")
 
-            # Clean up the GRPOTrainer and its colocated vLLM before next phase
+            # Clean up the GRPOTrainer and its colocated vLLM before next phase.
+            # The pluggable allocator / CUDA graphs from vLLM colocate may not
+            # fully release, so we free everything we can and let the subprocess
+            # query actual free memory to set gpu_memory_utilization dynamically.
+            question_model.zero_grad(set_to_none=True)
             del question_trainer
             question_model.to("cpu")
             gc.collect()
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
+        if skip_question_training:
+            question_gen_path = args.question_model_path
+        elif args.save_question_model:
+            question_gen_path = os.path.join(args.output_dir, f"question_model_{i}")
         else:
-            if args.save_question_model:
-                question_gen_path = os.path.join(args.output_dir, f"question_model_{i}")
-            else:
-                question_gen_path = args.question_model_path
+            question_gen_path = os.path.join(args.output_dir, f"_tmp_question_model_{i}")
+            question_model.save_pretrained(question_gen_path)
+            tokenizer.save_pretrained(question_gen_path)
 
         # ── Phase 2: Generate question dataset (standalone vLLM) ──
         # The standalone vLLM in generate_questions needs most of the GPU.
@@ -491,33 +539,31 @@ if __name__ == "__main__":
         student_trainer.train()
         student_model_dir = os.path.join(args.output_dir, f"student_model_{i}")
         student_model.save_pretrained(student_model_dir)
+        tokenizer.save_pretrained(student_model_dir)
         print(f"Saved student model to: {student_model_dir}")
 
         # Clean up the DistilTrainer and its colocated vLLM before next iteration
+        student_model.zero_grad(set_to_none=True)
         del student_trainer
+        teacher_model.to("cpu")
         gc.collect()
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
 
-        if args.report_student_performance:
-            print("Reporting student performance on a fresh question dataset...")
+        if args.report_student_performance and not args.debug:
+            print("Reporting student performance on question dataset from this iteration...")
 
-            # vLLM subprocess needs GPU memory; teacher_model was moved to
-            # CUDA by the DistilTrainer (as ref_model) so it must also be
-            # offloaded before the subprocess can allocate.
-            student_model.to("cpu")
+            # Reuse the question_dataset already generated in Phase 2 — no need
+            # to spin up another vLLM subprocess.
+            eval_question_dataset = question_dataset
+            print(f"Evaluation question dataset length: {len(eval_question_dataset)}")
+
+            # Move off GPU anything that's there (DistilTrainer may have placed
+            # teacher_model on CUDA as ref_model), then bring student + judge up.
             teacher_model.to("cpu")
-            judge_model.to("cpu")
             gc.collect()
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
-
-            eval_question_dataset = build_question_dataset(
-                question_gen_path, args.model_name, dataset,
-                args.num_question_generations, args.num_questions_per_generation,
-            )
-            print(f"Evaluation question dataset length: {len(eval_question_dataset)}")
-            assert len(eval_question_dataset) > 0, "No evaluation questions generated"
 
             student_model.gradient_checkpointing_disable()
             student_model.eval()
@@ -538,6 +584,14 @@ if __name__ == "__main__":
             with open(results_path, "w", encoding="utf-8") as f:
                 json.dump({"iteration": i, **eval_summary}, f, indent=2)
             print(f"Saved evaluation results to: {results_path}")
+
+        student_model.zero_grad(set_to_none=True)
+        student_model.to("cpu")
+        teacher_model.to("cpu")
+        judge_model.to("cpu")
+        gc.collect()
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
 
     final_student_model_dir = os.path.join(args.output_dir, "final_student_model")
     student_model.save_pretrained(final_student_model_dir)
