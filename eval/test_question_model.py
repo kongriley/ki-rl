@@ -57,9 +57,6 @@ def main():
         ids=[q["id"] for q in questions],
     )
 
-    print(f"\nOverall: {summary['correct']}/{summary['total']} correct "
-          f"({summary['accuracy']:.0%})")
-
     for r, q in zip(summary["results"], questions):
         print(f"\n{'='*80}")
         if args.full_passage:
@@ -71,6 +68,9 @@ def main():
         print(f"  A: {r['student_answer']}")
         print(f"  Judge: {r['verdict']}")
 
+    print(f"\nOverall: {summary['correct']}/{summary['total']} correct "
+          f"({summary['accuracy']:.0%})")
+          
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
         with open(args.output, "w", encoding="utf-8") as f:

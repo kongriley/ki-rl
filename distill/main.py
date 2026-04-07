@@ -44,10 +44,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--skip_first_iteration", action="store_true", default=False,
                    help="Skip the first iteration of the question generation loop.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
+    p.add_argument("--num_question_model_train_epochs", type=float, default=2)
     p.add_argument("--num_train_epochs", type=float, default=3)
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
     p.add_argument("--report_student_performance", action="store_true", default=True,
                    help="Report student performance on the question dataset after distillation.")
+    p.add_argument("--log_student_completions", action="store_true", default=False)
+    p.add_argument("--save_question_model", action="store_true", default=False)
     return p.parse_args()
 
 
@@ -116,13 +119,15 @@ def _is_valid_qa(question: str, answer: str) -> bool:
 def generate_questions(model_name_or_path: str, tokenizer_name: str, dataset: Dict, num_question_generations: int, num_questions_per_generation: int = 5, temperature: float = 1.2, max_retries: int = 3) -> list:
     n = max(1, math.ceil(num_question_generations / num_questions_per_generation))
 
-    llm = LLM(
+    llm_kwargs = dict(
         model=model_name_or_path,
-        tokenizer=tokenizer_name,
         dtype="bfloat16",
         max_model_len=4096,
         gpu_memory_utilization=0.6,
     )
+    if tokenizer_name != model_name_or_path:
+        llm_kwargs["tokenizer"] = tokenizer_name
+    llm = LLM(**llm_kwargs)
     sampling_params = SamplingParams(
         temperature=temperature,
         max_tokens=1024,
@@ -256,7 +261,7 @@ if __name__ == "__main__":
             num_generations=16,
             max_prompt_length=3072,
             max_completion_length=1024,
-            num_train_epochs = 2,
+            num_train_epochs = args.num_question_model_train_epochs,
             report_to = "none",
             gradient_checkpointing=True,
             optim="adamw_8bit",
@@ -295,12 +300,13 @@ if __name__ == "__main__":
         gradient_accumulation_steps = args.gradient_accumulation_steps,
         max_prompt_length = 1024,
         max_completion_length = 1024,
+        max_steps = 1,
         num_train_epochs = args.num_train_epochs,
         save_steps = 100,
         max_grad_norm = 1,
         report_to = None,
         output_dir = args.output_dir,
-        # log_completions = True,
+        log_completions = args.log_student_completions,
         sync_ref_model = True,
         ref_model_sync_steps = 1,
         ref_model_mixup_alpha = 0.0,
@@ -437,11 +443,11 @@ if __name__ == "__main__":
                 reward_funcs=reward_question_difficulty,
             )
             question_trainer.train()
-            question_model_dir = os.path.join(args.output_dir, f"question_model_{i}")
-            question_model.save_pretrained(question_model_dir)
-            tokenizer.save_pretrained(question_model_dir)
-            print(f"Saved question model to: {question_model_dir}")
-            question_gen_path = question_model_dir
+            if args.save_question_model:
+                question_model_dir = os.path.join(args.output_dir, f"question_model_{i}")
+                question_model.save_pretrained(question_model_dir)
+                tokenizer.save_pretrained(question_model_dir)
+                print(f"Saved question model to: {question_model_dir}")
 
             # Clean up the GRPOTrainer and its colocated vLLM before next phase
             del question_trainer
@@ -450,12 +456,17 @@ if __name__ == "__main__":
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
         else:
-            question_gen_path = args.question_model_path if args.question_model_path else model_name
+            if args.save_question_model:
+                question_gen_path = os.path.join(args.output_dir, f"question_model_{i}")
+            else:
+                question_gen_path = args.question_model_path
 
         # ── Phase 2: Generate question dataset (standalone vLLM) ──
         # The standalone vLLM in generate_questions needs most of the GPU.
-        # Move models off GPU for this phase only.
+        # Move all models off GPU; teacher_model may be on CUDA if the
+        # DistilTrainer moved it there as ref_model in a prior iteration.
         student_model.to("cpu")
+        teacher_model.to("cpu")
         judge_model.to("cpu")
         gc.collect()
         torch.cuda.synchronize()
@@ -491,8 +502,11 @@ if __name__ == "__main__":
         if args.report_student_performance:
             print("Reporting student performance on a fresh question dataset...")
 
-            # vLLM subprocess needs GPU memory
+            # vLLM subprocess needs GPU memory; teacher_model was moved to
+            # CUDA by the DistilTrainer (as ref_model) so it must also be
+            # offloaded before the subprocess can allocate.
             student_model.to("cpu")
+            teacher_model.to("cpu")
             judge_model.to("cpu")
             gc.collect()
             torch.cuda.synchronize()
@@ -500,11 +514,13 @@ if __name__ == "__main__":
 
             eval_question_dataset = build_question_dataset(
                 question_gen_path, args.model_name, dataset,
-                100, args.num_questions_per_generation,
+                args.num_question_generations, args.num_questions_per_generation,
             )
             print(f"Evaluation question dataset length: {len(eval_question_dataset)}")
             assert len(eval_question_dataset) > 0, "No evaluation questions generated"
 
+            student_model.gradient_checkpointing_disable()
+            student_model.eval()
             student_model.to("cuda")
             judge_model.to("cuda")
 
