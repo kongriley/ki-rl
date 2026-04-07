@@ -14,14 +14,36 @@ from main import load_dataset, generate_questions
 from inference import evaluate_qa
 
 
+def resolve_pretrained_source(name: str) -> str:
+    """Hub id unchanged; local dirs expanded to absolute path for robust loading."""
+    expanded = os.path.expanduser(name)
+    if os.path.isdir(expanded):
+        return os.path.abspath(expanded)
+    return name
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Use the question model to generate Q&A from passages, then score the student "
         "closed-book against reference answers (same judge setup as test_question_model)."
     )
-    p.add_argument("--student_model", default="allenai/OLMo-2-1124-7B-Instruct")
+    p.add_argument(
+        "--student_model",
+        default="allenai/OLMo-2-1124-7B-Instruct",
+        help="HF hub id or local checkpoint directory (absolute path used when a directory exists).",
+    )
+    p.add_argument(
+        "--student_tokenizer",
+        default=None,
+        help="Tokenizer for student/judge (default: load from --student_model). Use a base model id "
+        "if the checkpoint has no tokenizer files.",
+    )
     p.add_argument("--question_model", default="distill/out/grpo_distill/question_model_0")
-    p.add_argument("--tokenizer", default="allenai/OLMo-2-1124-7B-Instruct")
+    p.add_argument(
+        "--tokenizer",
+        default="allenai/OLMo-2-1124-7B-Instruct",
+        help="Tokenizer for vLLM question generation.",
+    )
     p.add_argument("--dataset", default="data/wiki_20/data.json")
     p.add_argument("--num_questions", type=int, default=3,
                    help="Target number of valid questions per passage (see generate_questions)")
@@ -33,9 +55,15 @@ def main():
                    help="Save results to this JSON file")
     args = p.parse_args()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, padding_side="left")
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    student_src = resolve_pretrained_source(args.student_model)
+    student_tok_src = (
+        resolve_pretrained_source(args.student_tokenizer)
+        if args.student_tokenizer
+        else student_src
+    )
+    student_tok = AutoTokenizer.from_pretrained(student_tok_src, padding_side="left")
+    if student_tok.pad_token is None:
+        student_tok.pad_token = student_tok.eos_token
 
     dataset = load_dataset(args.dataset)
     if args.max_passages is not None:
@@ -50,16 +78,16 @@ def main():
         temperature=args.temperature,
     )
 
-    print(f"Loading student: {args.student_model}")
+    print(f"Loading student: {student_src}")
     student = AutoModelForCausalLM.from_pretrained(
-        args.student_model, torch_dtype=torch.bfloat16, device_map="auto"
+        student_src, torch_dtype=torch.bfloat16, device_map="auto"
     )
     student.eval()
 
     summary = evaluate_qa(
         student,
         student,
-        tokenizer,
+        student_tok,
         [q["question"] for q in questions],
         [q["answer"] for q in questions],
         ids=[q["id"] for q in questions],
