@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num_grpo_generations", type=int, default=8,
                    help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
-    p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=True,
+    p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=False,
                    help="Report student performance on the question dataset after distillation.")
     p.add_argument("--log_student_completions", action="store_true", default=False)
     p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=True)

@@ -38,7 +38,7 @@ def main():
         help="Tokenizer for student/judge (default: load from --student_model). Use a base model id "
         "if the checkpoint has no tokenizer files.",
     )
-    p.add_argument("--question_model", default="distill/out/grpo_distill/question_model_0")
+    p.add_argument("--question_model", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument(
         "--tokenizer",
         default="allenai/OLMo-2-1124-7B-Instruct",
