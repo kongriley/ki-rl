@@ -49,7 +49,7 @@ sbatch <<EOF
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G
-#SBATCH --time=2:00:00
+#SBATCH --time=6:00:00
 #SBATCH --export=ALL
 #SBATCH --output=/data/scratch/rileyis/runs/ki-rl/%x.%j.out
 
