@@ -1,4 +1,4 @@
-"""Line plot of closed-book accuracy from test_student_model JSON outputs."""
+"""Line plot of closed-book accuracy from eval_questions JSON outputs."""
 
 from __future__ import annotations
 

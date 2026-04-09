@@ -6,8 +6,9 @@ import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "distill"))
-from main import load_dataset, generate_questions
+from generate_questions import load_dataset_json, generate_questions
 
 from inference import evaluate_qa
 
@@ -35,7 +36,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(args.model, torch_dtype=torch.bfloat16, device_map="auto")
     model.eval()
 
-    dataset = load_dataset(args.dataset)
+    dataset = load_dataset_json(args.dataset)
     if args.max_passages is not None:
         dataset = dict(list(dataset.items())[:args.max_passages])
 

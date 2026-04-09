@@ -31,18 +31,19 @@ from trl import GRPOConfig, GRPOTrainer  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "eval"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"))
 
 from inference import (  # noqa: E402
     batch_generate_answers,
     batch_generate_with_context,
     batch_judge_answers,
 )
-from main import (  # noqa: E402
-    _normalize_completion_text,
+from main import _normalize_completion_text  # noqa: E402
+from generate_questions import (  # noqa: E402
     _parse_question_answer,
     _is_valid_qa,
     build_question_prompt_dataset,
-    load_dataset,
+    load_dataset_json,
 )
 
 
@@ -83,7 +84,7 @@ def main():
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    dataset = load_dataset(manifest["dataset_path"])
+    dataset = load_dataset_json(manifest["dataset_path"])
     question_prompt_dataset = build_question_prompt_dataset(dataset)
 
     config = GRPOConfig(**manifest["grpo_config"])

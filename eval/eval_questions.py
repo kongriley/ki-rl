@@ -1,16 +1,32 @@
 import argparse
 import json
 import os
+import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "distill"))
+
 from inference import (
     build_student_prompt,
     build_judge_prompt as _shared_build_judge_prompt,
+    format_instruct_user_prompt,
     parse_verdict,
+    batch_generate,
+    batch_judge_answers_multi_prompt,
+)
+
+from generate_questions import (
+    generate_questions,
+    generate_questions_openai,
+    _create_question_prompt,
+    _parse_question_answers,
+    _is_valid_qa,
 )
 
 
@@ -24,28 +40,101 @@ def parse_args():
     p.add_argument("--judge_backend", choices=["hf", "openai"], default=None,
                     help="Backend for the judge (defaults to --backend)")
     p.add_argument("--data_path", type=str, default="data/wiki_20/data.json")
-    p.add_argument("--questions_path", type=str,
-                    default="data/wiki_20/gpt-5-mini_questions.jsonl")
+    p.add_argument("--questions_path", type=str, default=None,
+                    help="Path to pre-generated questions JSONL (mutually exclusive with --question_model)")
     p.add_argument("--icl", action="store_true",
                     help="ICL evaluation: ask questions with providing the passage")
     p.add_argument("--max_new_tokens", type=int, default=256)
     p.add_argument("--output", type=str, default=None)
     p.add_argument("--verbose", action="store_true")
+    p.add_argument("--answer_batch_size", type=int, default=8,
+                    help="Batch size for answer generation (HF: GPU batch, OpenAI: concurrent calls)")
+    p.add_argument("--batch_judge", action="store_true",
+                    help="Batch judging: HF uses multi-prompt, OpenAI uses concurrent API calls")
+    p.add_argument("--judge_batch_size", type=int, default=5,
+                    help="Number of questions per judge batch (only with --batch_judge)")
+
+    qg = p.add_argument_group("question generation",
+                              "Generate questions on-the-fly instead of loading from --questions_path")
+    qg.add_argument("--question_model", type=str, default=None,
+                     help="HF hub id / local checkpoint / OpenAI model name for question generation")
+    qg.add_argument("--question_backend", choices=["hf", "openai"], default="hf",
+                     help="Backend for question generation (default: hf/vLLM)")
+    qg.add_argument("--num_questions", type=int, default=3,
+                     help="Target number of valid questions per passage")
+    qg.add_argument("--num_questions_per_generation", type=int, default=5,
+                     help="Questions requested per prompt")
+    qg.add_argument("--temperature", type=float, default=1.2,
+                     help="Sampling temperature for question generation. Will be overridden by backend.")
+    qg.add_argument("--max_passages", type=int, default=None,
+                     help="Limit to first N passages (default: all)")
+    qg.add_argument("--save_questions", type=str, default=None,
+                     help="Save generated questions to this JSONL path")
+
     return p.parse_args()
 
 
-def load_data(data_path, questions_path):
+def load_articles(data_path):
     with open(data_path, "r") as f:
-        articles = {item["id"]: item for item in json.load(f)}
+        return {item["id"]: item for item in json.load(f)}
 
+
+def load_questions(questions_path):
     questions = []
     with open(questions_path, "r") as f:
         for line in f:
             q = json.loads(line)
             if q["output"].strip():
                 questions.append(q)
+    return questions
 
-    return articles, questions
+
+def load_data(data_path, questions_path):
+    return load_articles(data_path), load_questions(questions_path)
+
+
+# ---------------------------------------------------------------------------
+# On-the-fly question generation
+# ---------------------------------------------------------------------------
+
+def _run_question_generation(args, articles):
+    """Dispatch to HF/vLLM or OpenAI question generation and return normalised question list."""
+    dataset = {aid: a["text"] for aid, a in articles.items()}
+    if args.max_passages is not None:
+        dataset = dict(list(dataset.items())[:args.max_passages])
+
+    if args.question_backend == "openai":
+        oai = _openai_client()
+        raw_qs = generate_questions_openai(
+            oai, args.question_model, dataset, args.num_questions,
+            num_questions_per_generation=args.num_questions_per_generation,
+            temperature=args.temperature,
+        )
+    else:
+        print(f"Generating questions with: {args.question_model}")
+        raw_qs = generate_questions(
+            args.question_model, args.question_model, dataset,
+            args.num_questions,
+            num_questions_per_generation=args.num_questions_per_generation,
+            temperature=args.temperature,
+        )
+
+    questions = []
+    for q in raw_qs:
+        questions.append({
+            "id": q["id"],
+            "input": q["question"],
+            "output": q["answer"],
+        })
+
+    if args.save_questions:
+        os.makedirs(os.path.dirname(os.path.abspath(args.save_questions)), exist_ok=True)
+        with open(args.save_questions, "w", encoding="utf-8") as f:
+            for q in questions:
+                f.write(json.dumps(q) + "\n")
+        print(f"Saved {len(questions)} generated questions to {args.save_questions}")
+
+    return questions
 
 
 def build_icl_prompt(article_text: str, question: str) -> str:
@@ -92,12 +181,72 @@ def _openai_client():
     return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+def _sanitize_for_openai(text: str) -> str:
+    """Strip NUL bytes and other control characters that break OpenAI JSON payloads."""
+    import re
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+
+
 def generate_openai(client, model, messages, max_tokens=256, temperature=0.0):
+    clean_messages = [
+        {**m, "content": _sanitize_for_openai(m["content"])} for m in messages
+    ]
     resp = client.chat.completions.create(
-        model=model, messages=messages,
-        # max_completion_tokens=max_tokens
+        model=model, messages=clean_messages,
     )
     return resp.choices[0].message.content.strip()
+
+
+# ---------------------------------------------------------------------------
+# Batched answer generation
+# ---------------------------------------------------------------------------
+
+def _build_all_prompts(questions, articles, args, mode):
+    """Build prompts for all questions, filtering out missing articles for ICL.
+
+    Returns (kept_questions, prompts) where kept_questions is the subset of
+    questions that were not skipped.
+    """
+    kept = []
+    prompts = []
+    for q in questions:
+        if mode == "icl":
+            article = articles.get(q["id"])
+            if article is None:
+                print(f"Warning: no article for id={q['id']}, skipping")
+                continue
+            prompts.append(build_icl_prompt(article["text"], q["input"]))
+        else:
+            prompts.append(build_blind_prompt(q["input"]))
+        kept.append(q)
+    return kept, prompts
+
+
+def batch_answer_hf(model, tokenizer, prompts, batch_size=4, max_new_tokens=256):
+    """Generate answers for all prompts using GPU-batched inference."""
+    formatted = [
+        format_instruct_user_prompt(tokenizer, p) for p in prompts
+    ]
+    return batch_generate(
+        model, tokenizer, formatted,
+        batch_size=batch_size, max_new_tokens=max_new_tokens, max_length=8192,
+    )
+
+
+def batch_answer_openai(client, model, prompts, max_tokens=256, max_workers=8):
+    """Generate answers for all prompts concurrently via OpenAI API."""
+    answers = [None] * len(prompts)
+
+    def _gen(idx):
+        msgs = [{"role": "user", "content": prompts[idx]}]
+        return idx, generate_openai(client, model, msgs, max_tokens=max_tokens)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_gen, i) for i in range(len(prompts))]
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="Answering (OpenAI concurrent)"):
+            idx, ans = fut.result()
+            answers[idx] = ans
+    return answers
 
 
 # ---------------------------------------------------------------------------
@@ -121,17 +270,58 @@ def judge_hf(model, tokenizer, question, gold, answer):
 
 
 # ---------------------------------------------------------------------------
+# Batched judging
+# ---------------------------------------------------------------------------
+
+def judge_openai_batch(client, model, questions, golds, answers, batch_size=5):
+    """Judge all triples concurrently via OpenAI API using a thread pool."""
+    verdicts = [None] * len(questions)
+
+    def _judge_single(idx):
+        return idx, judge_openai(client, model, questions[idx], golds[idx], answers[idx])
+
+    with ThreadPoolExecutor(max_workers=batch_size) as pool:
+        futures = [pool.submit(_judge_single, i) for i in range(len(questions))]
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="Judging (OpenAI concurrent)"):
+            idx, result = fut.result()
+            verdicts[idx] = result
+    return verdicts
+
+
+def judge_hf_batch(model, tokenizer, questions, golds, answers, batch_size=5):
+    """Judge all triples using multi-prompt batching (multiple triples per prompt)."""
+    return batch_judge_answers_multi_prompt(
+        model, tokenizer, questions, golds, answers, group_size=batch_size,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main evaluation loop
 # ---------------------------------------------------------------------------
 
 def run_evaluation(args):
-    articles, questions = load_data(args.data_path, args.questions_path)
+    articles = load_articles(args.data_path)
+
+    if args.question_model:
+        questions = _run_question_generation(args, articles)
+    else:
+        questions = load_questions(args.questions_path)
+
     print(f"Loaded {len(articles)} articles, {len(questions)} questions (non-empty answers)")
 
-    # ---- answering model ----
+    mode = "icl" if args.icl else "closed-book"
+    print(f"Evaluation mode: {mode}")
+
+    # ---- build prompts ----
+    kept_questions, prompts = _build_all_prompts(questions, articles, args, mode)
+
+    # ---- generate answers (batched) ----
     if args.backend == "openai":
         oai = _openai_client()
-        answer_fn = lambda msgs: generate_openai(oai, args.model, msgs, max_tokens=args.max_new_tokens)
+        model_answers = batch_answer_openai(
+            oai, args.model, prompts,
+            max_tokens=args.max_new_tokens, max_workers=args.answer_batch_size,
+        )
     else:
         print(f"Loading model: {args.model}")
         tok = AutoTokenizer.from_pretrained(args.model, padding_side="left")
@@ -139,79 +329,94 @@ def run_evaluation(args):
             tok.pad_token = tok.eos_token
         mdl = AutoModelForCausalLM.from_pretrained(args.model, device_map="auto")
         mdl.eval()
-        answer_fn = lambda msgs: generate_hf(mdl, tok, msgs, max_new_tokens=args.max_new_tokens)
+        model_answers = batch_answer_hf(
+            mdl, tok, prompts,
+            batch_size=args.answer_batch_size, max_new_tokens=args.max_new_tokens,
+        )
 
     # ---- judge ----
     judge_model_name = args.judge_model or args.model
-    if args.judge_backend == "openai":
-        oai_judge = oai if args.backend == "openai" else _openai_client()
-        judge_fn = lambda q, g, a: judge_openai(oai_judge, judge_model_name, q, g, a)
-    else:
-        if args.backend == "hf" and judge_model_name == args.model:
-            j_mdl, j_tok = mdl, tok
-        else:
-            print(f"Loading judge model: {judge_model_name}")
-            j_tok = AutoTokenizer.from_pretrained(judge_model_name, padding_side="left")
-            if j_tok.pad_token is None:
-                j_tok.pad_token = j_tok.eos_token
-            j_mdl = AutoModelForCausalLM.from_pretrained(judge_model_name, device_map="auto")
-            j_mdl.eval()
-        judge_fn = lambda q, g, a: judge_hf(j_mdl, j_tok, q, g, a)
+    all_qs = [q["input"] for q in kept_questions]
+    all_golds = [q["output"] for q in kept_questions]
 
+    if args.batch_judge:
+        if args.judge_backend == "openai":
+            oai_judge = oai if args.backend == "openai" else _openai_client()
+            verdicts = judge_openai_batch(
+                oai_judge, judge_model_name, all_qs, all_golds, model_answers,
+                batch_size=args.judge_batch_size,
+            )
+        else:
+            if args.backend == "hf" and judge_model_name == args.model:
+                j_mdl, j_tok = mdl, tok
+            else:
+                print(f"Loading judge model: {judge_model_name}")
+                j_tok = AutoTokenizer.from_pretrained(judge_model_name, padding_side="left")
+                if j_tok.pad_token is None:
+                    j_tok.pad_token = j_tok.eos_token
+                j_mdl = AutoModelForCausalLM.from_pretrained(judge_model_name, device_map="auto")
+                j_mdl.eval()
+            print(f"Judging {len(all_qs)} answers in batches of {args.judge_batch_size}...")
+            verdicts = judge_hf_batch(
+                j_mdl, j_tok, all_qs, all_golds, model_answers,
+                batch_size=args.judge_batch_size,
+            )
+    else:
+        if args.judge_backend == "openai":
+            oai_judge = oai if args.backend == "openai" else _openai_client()
+            judge_fn = lambda q, g, a: judge_openai(oai_judge, judge_model_name, q, g, a)
+        else:
+            if args.backend == "hf" and judge_model_name == args.model:
+                j_mdl, j_tok = mdl, tok
+            else:
+                print(f"Loading judge model: {judge_model_name}")
+                j_tok = AutoTokenizer.from_pretrained(judge_model_name, padding_side="left")
+                if j_tok.pad_token is None:
+                    j_tok.pad_token = j_tok.eos_token
+                j_mdl = AutoModelForCausalLM.from_pretrained(judge_model_name, device_map="auto")
+                j_mdl.eval()
+            judge_fn = lambda q, g, a: judge_hf(j_mdl, j_tok, q, g, a)
+        verdicts = []
+        for q_text, gold, ma in tqdm(
+            zip(all_qs, all_golds, model_answers), total=len(all_qs), desc="Judging",
+        ):
+            verdicts.append(judge_fn(q_text, gold, ma))
+
+    # ---- assemble results ----
     results = []
     correct = 0
-    total = 0
-
-    mode = "icl" if args.icl else "closed-book"
-    print(f"Evaluation mode: {mode}")
-
-    for q in tqdm(questions, desc=f"Evaluating ({mode})"):
-        if args.icl:
-            article = articles.get(q["id"])
-            if article is None:
-                print(f"Warning: no article for id={q['id']}, skipping")
-                continue
-            prompt = build_icl_prompt(article["text"], q["input"])
-        else:
-            prompt = build_blind_prompt(q["input"])
-
-        messages = [{"role": "user", "content": prompt}]
-        model_answer = answer_fn(messages)
-
-        is_correct, verdict = judge_fn(q["input"], q["output"], model_answer)
+    for q, ma, (is_correct, verdict) in zip(kept_questions, model_answers, verdicts):
         correct += int(is_correct)
-        total += 1
-
         results.append({
             "id": q["id"],
-            "title": q["title"],
             "question": q["input"],
             "gold_answer": q["output"],
-            "model_answer": model_answer,
+            "model_answer": ma,
             "judge_verdict": verdict,
             "is_correct": is_correct,
         })
 
         if args.verbose:
             print(f"\n{'='*60}")
-            print(f"[{q['title']}]  {'CORRECT' if is_correct else 'WRONG'}")
+            print(f"[{q['id']}]  {'CORRECT' if is_correct else 'WRONG'}")
             print(f"  Q: {q['input'][:150]}…")
             print(f"  Gold:  {q['output'][:150]}")
-            print(f"  Model: {model_answer[:150]}")
+            print(f"  Model: {ma[:150]}")
 
+    total = len(results)
     accuracy = correct / total if total else 0.0
     print(f"\n{'='*60}")
     print(f"[{mode}] Overall: {correct}/{total} correct  ({accuracy:.1%})")
 
-    per_article = defaultdict(lambda: {"correct": 0, "total": 0})
+    per_passage = defaultdict(lambda: {"correct": 0, "total": 0})
     for r in results:
-        per_article[r["title"]]["correct"] += int(r["is_correct"])
-        per_article[r["title"]]["total"] += 1
+        per_passage[r["id"]]["correct"] += int(r["is_correct"])
+        per_passage[r["id"]]["total"] += 1
 
-    print("\nPer-article breakdown:")
-    for title, s in sorted(per_article.items()):
+    print("\nPer-passage breakdown:")
+    for pid, s in sorted(per_passage.items()):
         a = s["correct"] / s["total"] if s["total"] else 0
-        print(f"  {title}: {s['correct']}/{s['total']} ({a:.0%})")
+        print(f"  {pid}: {s['correct']}/{s['total']} ({a:.0%})")
 
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
@@ -226,4 +431,8 @@ if __name__ == "__main__":
     args = parse_args()
     if args.judge_backend is None:
         args.judge_backend = args.backend
+    if args.question_model is None and args.questions_path is None:
+        args.questions_path = "data/wiki_20/gpt-5-mini_questions.jsonl"
+    if args.question_model and args.questions_path:
+        raise SystemExit("Specify --question_model or --questions_path, not both.")
     run_evaluation(args)
