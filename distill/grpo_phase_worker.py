@@ -22,8 +22,9 @@ def _find_free_port():
         return s.getsockname()[1]
 
 
-os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "127.0.0.1")
-os.environ["MASTER_PORT"] = str(_find_free_port())
+if "MASTER_PORT" not in os.environ:
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = str(_find_free_port())
 
 import torch  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
@@ -224,8 +225,9 @@ def main():
     trainer.train()
 
     output_dir = manifest["output_dir"]
-    question_model.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    trainer.save_model(output_dir)
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        tokenizer.save_pretrained(output_dir)
     print(f"[grpo_phase_worker] Saved question model to {output_dir}")
 
     del trainer, question_model, student_model, judge_model

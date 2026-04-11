@@ -58,6 +58,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--log_student_completions", action="store_true", default=False)
     p.add_argument("--vllm_importance_sampling_correction", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs for training (accelerate) and question generation (vLLM TP)")
     p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 for debugging")
     return p.parse_args()
 
@@ -122,6 +123,7 @@ if __name__ == "__main__":
             )
             question_model_output = os.path.join(args.output_dir, f"question_model_{i}")
 
+            effective_grad_accum = max(1, args.gradient_accumulation_steps // args.num_gpus)
             grpo_kw = dict(
                 seed=args.seed,
                 use_vllm=True,
@@ -136,7 +138,7 @@ if __name__ == "__main__":
                 bf16=True,
                 fp16=False,
                 per_device_train_batch_size=1,
-                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                gradient_accumulation_steps=effective_grad_accum,
                 num_generations=args.num_grpo_generations,
                 max_prompt_length=3072,
                 max_completion_length=args.max_completion_length,
@@ -164,7 +166,13 @@ if __name__ == "__main__":
 
             grpo_worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "grpo_phase_worker.py")
             print(f"Running GRPO training in subprocess ({grpo_worker})...")
-            subprocess.run([sys.executable, grpo_worker, grpo_manifest_path], check=True)
+            grpo_cmd = [
+                sys.executable, "-m", "accelerate.commands.launch",
+                "--num_processes", str(args.num_gpus),
+                "--mixed_precision", "bf16",
+                grpo_worker, grpo_manifest_path,
+            ]
+            subprocess.run(grpo_cmd, check=True)
             print(f"Question model saved to: {question_model_output}")
 
         if skip_question_training:
@@ -186,6 +194,7 @@ if __name__ == "__main__":
             args.num_question_generations, args.num_questions_per_generation,
             student_prompt_fn=build_student_prompt,
             teacher_prompt_fn=build_teacher_prompt,
+            tensor_parallel_size=args.num_gpus,
         )
         print(f"Question dataset length: {len(question_dataset)}")
         assert len(question_dataset) > 0, "No questions generated"
@@ -206,6 +215,7 @@ if __name__ == "__main__":
         dataset_path = os.path.join(args.output_dir, f"_questions_{i}.jsonl")
         question_dataset.to_json(dataset_path)
 
+        effective_distil_grad_accum = max(1, args.gradient_accumulation_steps // args.num_gpus)
         distil_kw = dict(
             seed=args.seed,
             use_vllm=True,
@@ -220,7 +230,7 @@ if __name__ == "__main__":
             bf16=True,
             fp16=False,
             per_device_train_batch_size=1,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            gradient_accumulation_steps=effective_distil_grad_accum,
             max_prompt_length=1024,
             max_completion_length=args.max_completion_length,
             num_train_epochs=args.num_train_epochs,
@@ -251,7 +261,13 @@ if __name__ == "__main__":
 
         worker_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "distill_phase_worker.py")
         print(f"Running student distillation in subprocess ({worker_py})...")
-        subprocess.run([sys.executable, worker_py, manifest_path], check=True)
+        distill_cmd = [
+            sys.executable, "-m", "accelerate.commands.launch",
+            "--num_processes", str(args.num_gpus),
+            "--mixed_precision", "bf16",
+            worker_py, manifest_path,
+        ]
+        subprocess.run(distill_cmd, check=True)
 
         # Reload the trained student from the subprocess output
         del student_model
