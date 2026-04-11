@@ -36,9 +36,9 @@ from generate_questions import (
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--num_generation_iterations", type=int, default=5, help="Number of times to run the generation loop")
-    p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
-    p.add_argument("--num_questions_per_generation", type=int, default=5, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
+    p.add_argument("--num_generation_iterations", type=int, default=20, help="Number of times to run the generation loop")
+    p.add_argument("--num_question_generations", type=int, default=16, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
+    p.add_argument("--num_questions_per_generation", type=int, default=8, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--output_dir", default="./distill/out/grpo_distill")
@@ -49,14 +49,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
     p.add_argument("--num_train_epochs", type=float, default=1)
-    p.add_argument("--num_grpo_generations", type=int, default=8,
+    p.add_argument("--num_grpo_generations", type=int, default=4,
                    help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
+    p.add_argument("--max_completion_length", type=int, default=512)
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
     p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=False,
                    help="Report student performance on the question dataset after distillation.")
     p.add_argument("--log_student_completions", action="store_true", default=False)
+    p.add_argument("--vllm_importance_sampling_correction", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 and does not report student performance for debugging")
+    p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 for debugging")
     return p.parse_args()
 
 
@@ -137,7 +139,7 @@ if __name__ == "__main__":
                 gradient_accumulation_steps=args.gradient_accumulation_steps,
                 num_generations=args.num_grpo_generations,
                 max_prompt_length=3072,
-                max_completion_length=1024,
+                max_completion_length=args.max_completion_length,
                 num_train_epochs=args.num_question_model_train_epochs,
                 report_to="none",
                 gradient_checkpointing=True,
@@ -220,7 +222,7 @@ if __name__ == "__main__":
             per_device_train_batch_size=1,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             max_prompt_length=1024,
-            max_completion_length=1024,
+            max_completion_length=args.max_completion_length,
             num_train_epochs=args.num_train_epochs,
             save_steps=100,
             max_grad_norm=1,
@@ -228,7 +230,7 @@ if __name__ == "__main__":
             output_dir=student_model_dir,
             log_completions=args.log_student_completions and not args.debug,
             sync_ref_model=False,
-            vllm_importance_sampling_correction=True,
+            vllm_importance_sampling_correction=args.vllm_importance_sampling_correction,
             gradient_checkpointing=True,
             optim="adamw_8bit",
         )
