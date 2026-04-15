@@ -56,6 +56,7 @@ def main():
     trainer = DistilTrainer(
         model=student,
         ref_model=teacher,
+        processing_class=tokenizer,
         args=config,
         train_dataset=dataset,
     )
@@ -75,6 +76,8 @@ def main():
     torch.cuda.empty_cache()
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()
+    sys.stdout.flush()
+    sys.stderr.flush()
     os._exit(0)
 
 

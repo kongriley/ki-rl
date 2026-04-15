@@ -1,11 +1,14 @@
 import argparse
 import gc
 import json
+import math
 import os
+import shutil
 import subprocess
 import sys
 from typing import Dict
 import torch
+from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "eval"))
@@ -19,13 +22,20 @@ from inference import (
     batch_judge_answers,
     evaluate_qa,
 )
+from eval_questions import (
+    _openai_client,
+    judge_openai_batch,
+    load_questions as load_questions_jsonl,
+)
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
 from generate_questions import (
     load_dataset_json,
     build_question_prompt_dataset,
     build_question_dataset,
+    build_question_dataset_for_deficits,
     generate_questions,
+    generate_questions_openai,
     _create_question_prompt,
     _build_prompt_conversation,
     _parse_question_answers,
@@ -37,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_generation_iterations", type=int, default=20, help="Number of times to run the generation loop")
-    p.add_argument("--num_question_generations", type=int, default=16, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
+    p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
     p.add_argument("--num_questions_per_generation", type=int, default=8, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
@@ -55,9 +65,28 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gradient_accumulation_steps", type=int, default=32)
     p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=False,
                    help="Report student performance on the question dataset after distillation.")
+    p.add_argument("--eval_questions_path", type=str, default=None,
+                   help="Path to pre-generated questions JSONL for evaluation. "
+                        "When set, uses these fixed questions instead of the iteration's generated questions.")
+    p.add_argument("--eval_question_model", type=str, default=None,
+                   help="Model name for on-the-fly eval question generation (e.g. gpt-5-mini). "
+                        "Mutually exclusive with --eval_questions_path.")
+    p.add_argument("--eval_question_backend", choices=["hf", "openai"], default="openai",
+                   help="Backend for eval question generation (default: openai).")
+    p.add_argument("--eval_num_questions", type=int, default=3,
+                   help="Number of questions per passage when generating eval questions on-the-fly.")
+    p.add_argument("--eval_judge_model", type=str, default=None,
+                   help="Judge model name for evaluation (e.g. gpt-4o-mini). "
+                        "When None, uses the local HF judge model.")
+    p.add_argument("--eval_judge_backend", choices=["hf", "openai"], default="hf",
+                   help="Backend for the evaluation judge. "
+                        "When 'openai', skips loading the local judge model entirely.")
     p.add_argument("--log_student_completions", action="store_true", default=False)
     p.add_argument("--vllm_importance_sampling_correction", action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--save_student_model", action=argparse.BooleanOptionalAction, default=False,
+                   help="Persist student model checkpoints and the final model to the output directory.")
+    p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=False,
+                   help="Persist question model checkpoints to the output directory.")
     p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 for debugging")
     return p.parse_args()
 
@@ -92,6 +121,13 @@ if __name__ == "__main__":
 
     skip_question_training = args.question_model_path is not None
 
+    if args.eval_questions_path and args.eval_question_model:
+        raise SystemExit("Specify --eval_questions_path or --eval_question_model, not both.")
+
+    need_local_judge = (
+        args.report_student_performance and args.eval_judge_backend == "hf"
+    )
+
     # Only load models needed in the main process (eval).
     # GRPO and distillation each run in their own subprocess with a fresh
     # CUDA context, so they load models independently.
@@ -99,18 +135,24 @@ if __name__ == "__main__":
         args.model_name,
         torch_dtype=torch.bfloat16,
     )
-    judge_model = AutoModelForCausalLM.from_pretrained(
-        args.model_name,
-        torch_dtype=torch.bfloat16,
-    )
+    if need_local_judge:
+        judge_model = AutoModelForCausalLM.from_pretrained(
+            args.model_name,
+            torch_dtype=torch.bfloat16,
+        )
+    else:
+        judge_model = None
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    all_good_questions = []
 
     for i in range(args.num_generation_iterations):
         # ── Phase 1: Question model training (GRPO subprocess) ──
         # Runs in a subprocess so each iteration gets a clean CUDA context
         # (vLLM colocated MemPool is a per-process singleton).
+        grpo_ran = False
         if not (i == 0 and args.skip_first_iteration) and not skip_question_training:
             question_model_input = (
                 args.model_name if i == 0
@@ -121,6 +163,12 @@ if __name__ == "__main__":
                 else os.path.join(args.output_dir, f"student_model_{i - 1}")
             )
             question_model_output = os.path.join(args.output_dir, f"question_model_{i}")
+
+            num_prompts = len(dataset)
+            grpo_grad_accum = min(args.gradient_accumulation_steps, num_prompts)
+            grpo_grad_accum = max(grpo_grad_accum, args.num_grpo_generations)
+            total_samples = int(num_prompts * args.num_question_model_train_epochs)
+            computed_max_steps = max(1, math.ceil(total_samples / grpo_grad_accum))
 
             grpo_kw = dict(
                 seed=args.seed,
@@ -136,11 +184,12 @@ if __name__ == "__main__":
                 bf16=True,
                 fp16=False,
                 per_device_train_batch_size=1,
-                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                gradient_accumulation_steps=grpo_grad_accum,
                 num_generations=args.num_grpo_generations,
                 max_prompt_length=3072,
                 max_completion_length=args.max_completion_length,
-                num_train_epochs=args.num_question_model_train_epochs,
+                max_steps=computed_max_steps,
+                save_strategy="no",
                 report_to="none",
                 gradient_checkpointing=True,
                 optim="adamw_8bit",
@@ -149,6 +198,7 @@ if __name__ == "__main__":
             if args.debug:
                 grpo_kw["max_steps"] = 1
 
+            good_questions_path = os.path.join(args.output_dir, f"_good_questions_{i}.jsonl")
             grpo_manifest = {
                 "question_model_path": question_model_input,
                 "student_model_path": student_input,
@@ -156,6 +206,7 @@ if __name__ == "__main__":
                 "tokenizer_name": args.model_name,
                 "dataset_path": args.dataset_path,
                 "output_dir": question_model_output,
+                "good_questions_path": good_questions_path,
                 "grpo_config": grpo_kw,
             }
             grpo_manifest_path = os.path.join(args.output_dir, f"_grpo_manifest_{i}.json")
@@ -165,28 +216,78 @@ if __name__ == "__main__":
             grpo_worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "grpo_phase_worker.py")
             print(f"Running GRPO training in subprocess ({grpo_worker})...")
             subprocess.run([sys.executable, grpo_worker, grpo_manifest_path], check=True)
+            os.remove(grpo_manifest_path)
             print(f"Question model saved to: {question_model_output}")
+            grpo_ran = True
+
+        # ── Phase 2: Build question dataset for distillation ──
+        # Move eval models off GPU before any potential subprocess.
+        student_model.to("cpu")
+        if judge_model is not None:
+            judge_model.to("cpu")
+        gc.collect()
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
+        # Accumulate good questions discovered during GRPO training.
+        if grpo_ran:
+            gq_path = os.path.join(args.output_dir, f"_good_questions_{i}.jsonl")
+            if os.path.exists(gq_path):
+                with open(gq_path) as f:
+                    new_qs = [json.loads(line) for line in f if line.strip()]
+                all_good_questions.extend(new_qs)
+                os.remove(gq_path)
+                print(f"Collected {len(new_qs)} good questions this iteration, "
+                      f"{len(all_good_questions)} total accumulated")
 
         if skip_question_training:
             question_gen_path = args.question_model_path
         else:
             question_gen_path = os.path.join(args.output_dir, f"question_model_{i}")
 
-        # ── Phase 2: Generate question dataset (standalone vLLM) ──
-        # Move eval models off GPU before spawning the subprocess.
-        student_model.to("cpu")
-        judge_model.to("cpu")
-        gc.collect()
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
+        # Compute per-passage deficits against the target.
+        good_by_passage: Dict[str, list] = {}
+        for q in all_good_questions:
+            good_by_passage.setdefault(q["id"], []).append(q)
 
-        print(f"Building question dataset using vLLM from: {question_gen_path}")
-        question_dataset = build_question_dataset(
-            question_gen_path, args.model_name, dataset,
-            args.num_question_generations, args.num_questions_per_generation,
-            student_prompt_fn=build_student_prompt,
-            teacher_prompt_fn=build_teacher_prompt,
-        )
+        deficit_counts: Dict[str, int] = {}
+        for pid in dataset:
+            need = args.num_question_generations - len(good_by_passage.get(pid, []))
+            if need > 0:
+                deficit_counts[pid] = need
+
+        if deficit_counts:
+            total_deficit = sum(deficit_counts.values())
+            print(f"Generating questions for {len(deficit_counts)}/{len(dataset)} passages "
+                  f"({total_deficit} total deficit, have {len(all_good_questions)} good)")
+            generated_dataset = build_question_dataset_for_deficits(
+                question_gen_path, args.model_name, dataset,
+                deficit_counts, args.num_questions_per_generation,
+                student_prompt_fn=build_student_prompt,
+                teacher_prompt_fn=build_teacher_prompt,
+            )
+        else:
+            generated_dataset = None
+            print(f"All {len(dataset)} passages have >= {args.num_question_generations} "
+                  f"good questions; skipping generation")
+
+        rows = []
+        for q in all_good_questions:
+            rows.append({
+                "id": q["id"],
+                "question": q["question"],
+                "answer": q["answer"],
+                "prompt": _build_prompt_conversation(build_student_prompt(q["question"])),
+                "teacher_prompt": _build_prompt_conversation(
+                    build_teacher_prompt(q["question"], dataset[q["id"]])),
+            })
+        if generated_dataset is not None:
+            for idx in range(len(generated_dataset)):
+                rows.append(dict(generated_dataset[idx]))
+        question_dataset = Dataset.from_list(rows)
+        print(f"Distillation dataset: {len(all_good_questions)} good questions"
+              + (f" + {len(generated_dataset)} generated" if generated_dataset else "")
+              + f" = {len(question_dataset)} total")
         print(f"Question dataset length: {len(question_dataset)}")
         assert len(question_dataset) > 0, "No questions generated"
 
@@ -206,6 +307,7 @@ if __name__ == "__main__":
         dataset_path = os.path.join(args.output_dir, f"_questions_{i}.jsonl")
         question_dataset.to_json(dataset_path)
 
+        distil_grad_accum = min(args.gradient_accumulation_steps, len(question_dataset))
         distil_kw = dict(
             seed=args.seed,
             use_vllm=True,
@@ -220,11 +322,11 @@ if __name__ == "__main__":
             bf16=True,
             fp16=False,
             per_device_train_batch_size=1,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            gradient_accumulation_steps=distil_grad_accum,
             max_prompt_length=1024,
             max_completion_length=args.max_completion_length,
             num_train_epochs=args.num_train_epochs,
-            save_steps=100,
+            save_strategy="no",
             max_grad_norm=1,
             report_to="none",
             output_dir=student_model_dir,
@@ -252,6 +354,8 @@ if __name__ == "__main__":
         worker_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "distill_phase_worker.py")
         print(f"Running student distillation in subprocess ({worker_py})...")
         subprocess.run([sys.executable, worker_py, manifest_path], check=True)
+        os.remove(manifest_path)
+        # os.remove(dataset_path)
 
         # Reload the trained student from the subprocess output
         del student_model
@@ -259,24 +363,106 @@ if __name__ == "__main__":
         student_model = AutoModelForCausalLM.from_pretrained(
             student_model_dir, torch_dtype=torch.bfloat16,
         )
-        print(f"Student model saved to: {student_model_dir}")
 
-        if args.report_student_performance and not args.debug:
-            print("Reporting student performance on question dataset from this iteration...")
+        # Previous iteration's on-disk models are no longer needed by any
+        # subprocess; clean them up unless the user asked to keep them.
+        if i > 0:
+            if not args.save_student_model:
+                prev = os.path.join(args.output_dir, f"student_model_{i - 1}")
+                if os.path.isdir(prev):
+                    shutil.rmtree(prev)
+            if not args.save_question_model and not skip_question_training:
+                prev = os.path.join(args.output_dir, f"question_model_{i - 1}")
+                if os.path.isdir(prev):
+                    shutil.rmtree(prev)
 
-            eval_question_dataset = question_dataset
-            print(f"Evaluation question dataset length: {len(eval_question_dataset)}")
+        if args.report_student_performance:
+            print("Reporting student performance...")
 
+            # ---- Resolve evaluation questions ----
+            if args.eval_questions_path:
+                raw_qs = load_questions_jsonl(args.eval_questions_path)
+                eval_questions = [q["input"] for q in raw_qs]
+                eval_answers = [q["output"] for q in raw_qs]
+                eval_ids = [q["id"] for q in raw_qs]
+            elif args.eval_question_model:
+                if args.eval_question_backend == "openai":
+                    oai = _openai_client()
+                    raw_qs = generate_questions_openai(
+                        oai, args.eval_question_model, dataset,
+                        args.eval_num_questions,
+                        num_questions_per_generation=args.num_questions_per_generation,
+                    )
+                else:
+                    raw_qs = generate_questions(
+                        args.eval_question_model, args.eval_question_model,
+                        dataset, args.eval_num_questions,
+                        num_questions_per_generation=args.num_questions_per_generation,
+                    )
+                eval_questions = [q["question"] for q in raw_qs]
+                eval_answers = [q["answer"] for q in raw_qs]
+                eval_ids = [q["id"] for q in raw_qs]
+            else:
+                eval_questions = list(question_dataset["question"])
+                eval_answers = list(question_dataset["answer"])
+                eval_ids = list(question_dataset["id"])
+
+            print(f"Evaluation questions: {len(eval_questions)}")
+
+            # ---- Student answers (always local HF) ----
             student_model.eval()
             student_model.to("cuda")
-            judge_model.to("cuda")
 
-            eval_summary = evaluate_qa(
-                student_model, judge_model, tokenizer,
-                eval_question_dataset["question"],
-                eval_question_dataset["answer"],
-                ids=eval_question_dataset["id"],
+            student_answers = batch_generate_answers(
+                student_model, tokenizer, eval_questions,
             )
+
+            # ---- Judging ----
+            if args.eval_judge_backend == "openai":
+                judge_name = args.eval_judge_model
+                if judge_name is None:
+                    raise SystemExit(
+                        "--eval_judge_model is required when --eval_judge_backend=openai"
+                    )
+                oai_judge = _openai_client()
+                verdicts = judge_openai_batch(
+                    oai_judge, judge_name,
+                    eval_questions, eval_answers, student_answers,
+                )
+            else:
+                if judge_model is not None:
+                    judge_model.to("cuda")
+                verdicts = batch_judge_answers(
+                    judge_model, tokenizer,
+                    eval_questions, eval_answers, student_answers,
+                )
+
+            # ---- Assemble results ----
+            results = []
+            correct = 0
+            for idx, (q, ref, sa, (is_correct, verdict)) in enumerate(
+                zip(eval_questions, eval_answers, student_answers, verdicts)
+            ):
+                correct += int(is_correct)
+                entry = {
+                    "question": q,
+                    "reference_answer": ref,
+                    "student_answer": sa,
+                    "verdict": verdict,
+                    "is_correct": is_correct,
+                    "id": eval_ids[idx],
+                }
+                results.append(entry)
+
+            total = len(results)
+            accuracy = correct / total if total else 0.0
+            eval_summary = {
+                "accuracy": accuracy,
+                "correct": correct,
+                "total": total,
+                "results": results,
+            }
+
             print(f"[Iteration {i}] Student accuracy: "
                   f"{eval_summary['correct']}/{eval_summary['total']} "
                   f"({eval_summary['accuracy']:.1%})")
@@ -287,11 +473,25 @@ if __name__ == "__main__":
             print(f"Saved evaluation results to: {results_path}")
 
         student_model.to("cpu")
-        judge_model.to("cpu")
+        if judge_model is not None:
+            judge_model.to("cpu")
         gc.collect()
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
 
+    # Clean up the last iteration's intermediate models.
+    last = args.num_generation_iterations - 1
+    if not args.save_student_model:
+        path = os.path.join(args.output_dir, f"student_model_{last}")
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+    if not args.save_question_model and not skip_question_training:
+        path = os.path.join(args.output_dir, f"question_model_{last}")
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+
+    # Save the final student model always
     final_student_model_dir = os.path.join(args.output_dir, "final_student_model")
     student_model.save_pretrained(final_student_model_dir)
+    tokenizer.save_pretrained(final_student_model_dir)
     print(f"Saved final student model to: {final_student_model_dir}")

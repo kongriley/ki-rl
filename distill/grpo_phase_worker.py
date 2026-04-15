@@ -90,6 +90,7 @@ def main():
     config = GRPOConfig(**manifest["grpo_config"])
 
     _reward_call_count = [0]
+    good_questions = []
 
     @torch.no_grad()
     def reward_question_difficulty(completions, **kwargs) -> float:
@@ -196,6 +197,14 @@ def main():
                         rewards[idx] += LENGTH_PENALTY
                         all_reasons[idx] += "+long"
 
+        for idx in range(len(questions)):
+            if "good_question" in all_reasons[idx]:
+                good_questions.append({
+                    "id": passage_ids[idx],
+                    "question": questions[idx],
+                    "answer": ref_answers[idx],
+                })
+
         n_format_bad = sum(1 for v in valid_mask if not v)
         n_samples = min(3, len(questions))
         print(f"\n{'='*60}")
@@ -217,11 +226,19 @@ def main():
 
     trainer = GRPOTrainer(
         model=question_model,
+        processing_class=tokenizer,
         args=config,
         train_dataset=question_prompt_dataset,
         reward_funcs=reward_question_difficulty,
     )
     trainer.train()
+
+    good_questions_path = manifest.get("good_questions_path")
+    if good_questions_path:
+        with open(good_questions_path, "w") as f:
+            for q in good_questions:
+                f.write(json.dumps(q) + "\n")
+        print(f"[grpo_phase_worker] Saved {len(good_questions)} good questions to {good_questions_path}")
 
     output_dir = manifest["output_dir"]
     question_model.save_pretrained(output_dir)
@@ -234,6 +251,8 @@ def main():
     torch.cuda.empty_cache()
     if torch.distributed.is_initialized():
         torch.distributed.destroy_process_group()
+    sys.stdout.flush()
+    sys.stderr.flush()
     os._exit(0)
 
 

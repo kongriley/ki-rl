@@ -164,6 +164,101 @@ def generate_questions(
     return questions
 
 
+def generate_questions_for_deficits(
+    model_name_or_path: str,
+    tokenizer_name: str,
+    dataset: Dict,
+    deficit_counts: Dict,
+    num_questions_per_generation: int = 5,
+    temperature: float = 1.2,
+    max_retries: int = 3,
+) -> list:
+    """Generate questions only for passages that still need them.
+
+    ``deficit_counts`` maps passage id -> number of additional questions needed.
+    Passages not present (or with count <= 0) are skipped entirely.
+    """
+    from vllm import LLM, SamplingParams
+
+    deficit_counts = {pid: n for pid, n in deficit_counts.items() if n > 0}
+    if not deficit_counts:
+        return []
+
+    max_needed = max(deficit_counts.values())
+    n = max(1, math.ceil(max_needed / num_questions_per_generation))
+
+    free_mem, total_mem = torch.cuda.mem_get_info()
+    free_frac = free_mem / total_mem
+    target_utilization = min(0.6, free_frac - 0.05)
+    target_utilization = max(target_utilization, 0.2)
+    print(f"  vLLM deficit gen: {free_mem/1e9:.1f}/{total_mem/1e9:.1f} GiB free "
+          f"({free_frac:.1%}), using gpu_memory_utilization={target_utilization:.2f}")
+
+    llm_kwargs = dict(
+        model=model_name_or_path,
+        dtype="bfloat16",
+        max_model_len=4096,
+        gpu_memory_utilization=target_utilization,
+    )
+    if tokenizer_name != model_name_or_path:
+        llm_kwargs["tokenizer"] = tokenizer_name
+    llm = LLM(**llm_kwargs)
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=1024,
+        n=n,
+    )
+
+    all_ids = list(deficit_counts.keys())
+    all_prompts = [
+        _create_question_prompt(dataset[pid], num_questions=num_questions_per_generation)
+        for pid in all_ids
+    ]
+
+    questions_by_id: Dict[str, list] = {pid: [] for pid in all_ids}
+
+    for attempt in range(max_retries):
+        if attempt == 0:
+            pending_ids = all_ids
+            pending_prompts = all_prompts
+        else:
+            pending_ids = [
+                pid for pid in all_ids
+                if len(questions_by_id[pid]) < deficit_counts[pid]
+            ]
+            if not pending_ids:
+                break
+            pending_prompts = [
+                _create_question_prompt(dataset[pid], num_questions=num_questions_per_generation)
+                for pid in pending_ids
+            ]
+            print(f"  Retry {attempt}/{max_retries}: regenerating for "
+                  f"{len(pending_ids)} passages with insufficient questions")
+
+        outputs = llm.generate(pending_prompts, sampling_params)
+
+        for output, pid in zip(outputs, pending_ids):
+            for completion in output.outputs:
+                for question, answer in _parse_question_answers(completion.text):
+                    if _is_valid_qa(question, answer):
+                        questions_by_id[pid].append(
+                            {"id": pid, "question": question, "answer": answer}
+                        )
+
+    questions = []
+    for pid in all_ids:
+        needed = deficit_counts[pid]
+        passage_qs = questions_by_id[pid][:needed]
+        if len(passage_qs) < needed:
+            print(f"  Warning: passage {pid} only got {len(passage_qs)}/{needed} "
+                  f"questions after {max_retries} attempts")
+        questions.extend(passage_qs)
+
+    del llm
+    torch.cuda.empty_cache()
+    return questions
+
+
 # ---------------------------------------------------------------------------
 # OpenAI question generation
 # ---------------------------------------------------------------------------
@@ -182,8 +277,7 @@ def generate_questions_openai(
         messages = [{"role": "user", "content": prompt}]
 
         collected = []
-        attempts = 0
-        while len(collected) < num_questions and attempts < 3:
+        while len(collected) < num_questions:
             resp = client.chat.completions.create(
                 model=model, messages=messages
             )
@@ -191,7 +285,6 @@ def generate_questions_openai(
             for question, answer in _parse_question_answers(raw):
                 if _is_valid_qa(question, answer):
                     collected.append({"id": passage_id, "question": question, "answer": answer})
-            attempts += 1
 
         if len(collected) < num_questions:
             print(f"  Warning: passage {passage_id} only got {len(collected)}/{num_questions} valid questions")
@@ -237,6 +330,59 @@ def build_question_dataset(
         target=_run_generate_questions,
         args=((model_name_or_path, tokenizer_name, dataset,
                num_question_generations, num_questions_per_generation, 1.2, queue),),
+    )
+    p.start()
+    questions = queue.get()
+    p.join()
+    if p.exitcode != 0:
+        raise RuntimeError(f"Question generation subprocess exited with code {p.exitcode}")
+
+    question_dataset = []
+    for row in questions:
+        id, question, answer = row["id"], row["question"], row["answer"]
+        entry: dict = {"id": id, "question": question, "answer": answer}
+        if student_prompt_fn is not None:
+            entry["prompt"] = _build_prompt_conversation(student_prompt_fn(question))
+        if teacher_prompt_fn is not None:
+            entry["teacher_prompt"] = _build_prompt_conversation(teacher_prompt_fn(question, dataset[id]))
+        question_dataset.append(entry)
+    return Dataset.from_list(question_dataset)
+
+
+def _run_generate_questions_for_deficits(args_and_queue):
+    """Subprocess target: generates deficit questions in a fresh CUDA context."""
+    (model_name_or_path, tokenizer_name, dataset, deficit_counts,
+     num_questions_per_generation, temperature, queue) = args_and_queue
+    results = generate_questions_for_deficits(
+        model_name_or_path, tokenizer_name, dataset,
+        deficit_counts, num_questions_per_generation, temperature,
+    )
+    queue.put(results)
+
+
+def build_question_dataset_for_deficits(
+    model_name_or_path: str,
+    tokenizer_name: str,
+    dataset: Dict,
+    deficit_counts: Dict,
+    num_questions_per_generation: int = 5,
+    student_prompt_fn=None,
+    teacher_prompt_fn=None,
+) -> Dataset:
+    """Generate questions for passages with deficits in a subprocess and build a HF Dataset.
+
+    ``deficit_counts`` maps passage id -> number of additional questions needed.
+    """
+    deficit_counts = {pid: n for pid, n in deficit_counts.items() if n > 0}
+    if not deficit_counts:
+        return Dataset.from_list([])
+
+    ctx = mp.get_context("spawn")
+    queue = ctx.Queue()
+    p = ctx.Process(
+        target=_run_generate_questions_for_deficits,
+        args=((model_name_or_path, tokenizer_name, dataset,
+               deficit_counts, num_questions_per_generation, 1.2, queue),),
     )
     p.start()
     questions = queue.get()
