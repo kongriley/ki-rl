@@ -102,6 +102,7 @@ def generate_questions(
     num_questions_per_generation: int = 5,
     temperature: float = 1.2,
     max_retries: int = 3,
+    tensor_parallel_size: int = 1,
 ) -> list:
     from vllm import LLM, SamplingParams
 
@@ -118,6 +119,7 @@ def generate_questions(
         dtype="bfloat16",
         max_model_len=4096,
         gpu_memory_utilization=target_utilization,
+        tensor_parallel_size=tensor_parallel_size,
     )
     if tokenizer_name != model_name_or_path:
         llm_kwargs["tokenizer"] = tokenizer_name
@@ -300,10 +302,11 @@ def generate_questions_openai(
 def _run_generate_questions(args_and_queue):
     """Subprocess target: generates questions in a fresh CUDA context."""
     (model_name_or_path, tokenizer_name, dataset, num_question_generations,
-     num_questions_per_generation, temperature, queue) = args_and_queue
+     num_questions_per_generation, temperature, tensor_parallel_size, queue) = args_and_queue
     results = generate_questions(
         model_name_or_path, tokenizer_name, dataset,
         num_question_generations, num_questions_per_generation, temperature,
+        tensor_parallel_size=tensor_parallel_size,
     )
     queue.put(results)
 
@@ -316,6 +319,7 @@ def build_question_dataset(
     num_questions_per_generation: int = 5,
     student_prompt_fn=None,
     teacher_prompt_fn=None,
+    tensor_parallel_size: int = 1,
 ) -> Dataset:
     """Generate questions in a subprocess and build a HF Dataset.
 
@@ -329,7 +333,8 @@ def build_question_dataset(
     p = ctx.Process(
         target=_run_generate_questions,
         args=((model_name_or_path, tokenizer_name, dataset,
-               num_question_generations, num_questions_per_generation, 1.2, queue),),
+               num_question_generations, num_questions_per_generation, 1.2,
+               tensor_parallel_size, queue),),
     )
     p.start()
     questions = queue.get()

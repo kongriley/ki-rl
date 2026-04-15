@@ -18,10 +18,9 @@ def _find_free_port():
         return s.getsockname()[1]
 
 
-# Force a free port before any torch/accelerate import can call init_process_group.
-# The parent process may still hold port 29500 from its own GRPO trainer.
-os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "127.0.0.1")
-os.environ["MASTER_PORT"] = str(_find_free_port())
+if "MASTER_PORT" not in os.environ:
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = str(_find_free_port())
 
 import torch  # noqa: E402
 from datasets import Dataset  # noqa: E402
@@ -39,7 +38,7 @@ def main():
 
     student = AutoModelForCausalLM.from_pretrained(
         manifest["student_model_path"], torch_dtype=torch.bfloat16,
-    ).to("cuda")
+    )
 
     teacher = AutoModelForCausalLM.from_pretrained(
         manifest["teacher_model_path"], torch_dtype=torch.bfloat16,
@@ -63,8 +62,9 @@ def main():
     trainer.train()
 
     output_dir = manifest["output_dir"]
-    student.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    trainer.save_model(output_dir)
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        tokenizer.save_pretrained(output_dir)
     print(f"[distill_phase_worker] Saved student to {output_dir}")
 
     # Tear down explicitly to avoid CUDAPluggableAllocator crash during

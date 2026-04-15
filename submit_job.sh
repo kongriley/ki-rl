@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Default partition (can be overridden with -p/--partition)
-PARTITION_NAME="vision-pulkitag-h200"
+PARTITION_NAME="vision-pulkitag-h100"
+NUM_GPUS=8
 
 # Parse optional args; everything after the script path is passed through to python
 EXTRA_ARGS=()
@@ -59,7 +60,7 @@ sbatch <<EOF
 #SBATCH -p $PARTITION_NAME
 #SBATCH -q vision-pulkitag-debug
 #SBATCH -A vision-pulkitag-urops
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:$NUM_GPUS
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G
 #SBATCH --time=6:00:00
