@@ -46,7 +46,7 @@ from generate_questions import (
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--num_generation_iterations", type=int, default=20, help="Number of times to run the generation loop")
+    p.add_argument("--num_generation_iterations", type=int, default=10, help="Number of times to run the generation loop")
     p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
     p.add_argument("--num_questions_per_generation", type=int, default=8, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
@@ -167,7 +167,7 @@ if __name__ == "__main__":
             num_prompts = len(dataset)
             grpo_grad_accum = min(args.gradient_accumulation_steps, num_prompts)
             grpo_grad_accum = max(grpo_grad_accum, args.num_grpo_generations)
-            total_samples = int(num_prompts * args.num_question_model_train_epochs)
+            total_samples = int(num_prompts * args.num_grpo_generations * args.num_question_model_train_epochs)
             computed_max_steps = max(1, math.ceil(total_samples / grpo_grad_accum))
 
             grpo_kw = dict(

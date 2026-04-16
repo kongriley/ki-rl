@@ -4,6 +4,7 @@ DEBUG=
 python -u distill/main.py \
 	--dataset_path ./data/wiki_20/single_passage.json \
 	--output_dir ./distill/out/grpo_distill_single \
+	--num_generation_iterations 50 \
 	--num_question_generations 100 \
 	--num_questions_per_generation 10 \
 	--report_student_performance \
