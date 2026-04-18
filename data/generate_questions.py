@@ -27,7 +27,7 @@ def load_dataset_json(data_path: str) -> Dict:
 def _create_question_prompt(text: str, num_questions: int = 1) -> str:
     return f"""
     Using the following passage, generate {num_questions} question{'' if num_questions == 1 else 's'} about the passage, along with their answers.
-    This question will be used in a separate examination in two weeks, where the students are not given the passage.
+    This question will be used in a separate examination, where the students are not given the passage. The questions should be challenging and not be easily answered by the passage. Keep the questions short and concise.
 
     Each question must be fully self-contained and understandable on its own, without needing the passage for context. Include specific names, dates, and topics directly in the question so a reader can understand exactly what is being asked. It should also not contain extraneous information that is not in the passage.
     - Bad: "Who was appointed after the resignation?" (unclear who or what)

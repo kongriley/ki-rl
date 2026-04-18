@@ -53,8 +53,6 @@ PRESIDIO_PENALTY = -1.5
 EASY_PENALTY = -1.0
 GARBAGE_PENALTY = -0.5
 GOOD_REWARD = 1.0
-LENGTH_PENALTY = -0.3
-MAX_QUESTION_LENGTH = 300
 
 
 def _swap_to_gpu(model):
@@ -193,10 +191,6 @@ def main():
                     else:
                         rewards[idx] = GARBAGE_PENALTY
                         all_reasons[idx] = "garbage"
-
-                    if len(questions[idx]) > MAX_QUESTION_LENGTH:
-                        rewards[idx] += LENGTH_PENALTY
-                        all_reasons[idx] += "+long"
 
         for idx in range(len(questions)):
             if "good_question" in all_reasons[idx]:
