@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "distill"))
 
 from inference import (
     build_student_prompt,
+    build_teacher_prompt,
     build_judge_prompt as _shared_build_judge_prompt,
     format_instruct_user_prompt,
     parse_verdict,
@@ -138,12 +139,7 @@ def _run_question_generation(args, articles):
 
 
 def build_icl_prompt(article_text: str, question: str) -> str:
-    return (
-        "Read the following passage carefully, then answer the question.\n\n"
-        f"--- Passage ---\n{article_text}\n--- End of Passage ---\n\n"
-        f"Question: {question}\n\n"
-        "Answer:"
-    )
+    return build_teacher_prompt(question, article_text)
 
 
 def build_blind_prompt(question: str) -> str:
@@ -228,7 +224,7 @@ def batch_answer_hf(model, tokenizer, prompts, batch_size=4, max_new_tokens=256)
         format_instruct_user_prompt(tokenizer, p) for p in prompts
     ]
     return batch_generate(
-        model, tokenizer, formatted,
+        model, tokenizer, formatted, use_tqdm=True,
         batch_size=batch_size, max_new_tokens=max_new_tokens, max_length=8192,
     )
 
@@ -329,6 +325,7 @@ def run_evaluation(args):
             tok.pad_token = tok.eos_token
         mdl = AutoModelForCausalLM.from_pretrained(args.model, device_map="auto")
         mdl.eval()
+        print(f"Generating answers for {len(prompts)} questions in batches of {args.answer_batch_size}...")
         model_answers = batch_answer_hf(
             mdl, tok, prompts,
             batch_size=args.answer_batch_size, max_new_tokens=args.max_new_tokens,

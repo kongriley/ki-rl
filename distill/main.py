@@ -457,6 +457,7 @@ if __name__ == "__main__":
             total = len(results)
             accuracy = correct / total if total else 0.0
             eval_summary = {
+                "iteration": i,
                 "accuracy": accuracy,
                 "correct": correct,
                 "total": total,
@@ -469,7 +470,7 @@ if __name__ == "__main__":
 
             results_path = os.path.join(args.output_dir, f"results_student_model_{i}.json")
             with open(results_path, "w", encoding="utf-8") as f:
-                json.dump({"iteration": i, **eval_summary}, f, indent=2)
+                json.dump(eval_summary, f, indent=2)
             print(f"Saved evaluation results to: {results_path}")
 
         student_model.to("cpu")

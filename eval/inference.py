@@ -5,7 +5,7 @@ import warnings
 from typing import Dict, List, Optional, Tuple
 
 import torch
-
+from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # Prompt builders
@@ -129,10 +129,16 @@ def batch_generate(
     batch_size: int = 4,
     max_new_tokens: int = 256,
     max_length: int = 1024,
+    use_tqdm: bool = False,
 ) -> List[str]:
     """Generate completions for a list of pre-built prompt strings (after chat template if used)."""
     all_outputs: List[str] = []
-    for start in range(0, len(prompts), batch_size):
+    for start in tqdm(
+        range(0, len(prompts), batch_size),
+        total=(len(prompts) + batch_size - 1) // batch_size,
+        desc="Generating answers",
+        disable=not use_tqdm
+    ):
         batch = prompts[start : start + batch_size]
         inputs = tokenizer(
             batch,
@@ -160,12 +166,13 @@ def batch_generate_answers(
     questions: List[str],
     batch_size: int = 4,
     max_new_tokens: int = 256,
+    use_tqdm: bool = False,
 ) -> List[str]:
     """Generate closed-book answers (no passage context)."""
     prompts = [
         format_instruct_user_prompt(tokenizer, build_student_prompt(q)) for q in questions
     ]
-    return batch_generate(model, tokenizer, prompts, batch_size=batch_size, max_new_tokens=max_new_tokens)
+    return batch_generate(model, tokenizer, prompts, batch_size=batch_size, max_new_tokens=max_new_tokens, use_tqdm=use_tqdm)
 
 
 def batch_generate_with_context(

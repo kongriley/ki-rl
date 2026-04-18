@@ -29,7 +29,7 @@ for i in 0 1 2 3 4; do
     --data_path data/wiki_20/data.json \
     "${QUESTION_ARGS[@]}" \
     "${JUDGE_ARGS[@]}" \
-    --output $OUTPUT_DIR/student_${i}_results.json \
+    --output $OUTPUT_DIR/results_student_model_${i}.json \
     --batch_judge
 done
 
@@ -38,9 +38,9 @@ python eval/eval_questions.py \
   --data_path data/wiki_20/data.json \
   "${QUESTION_ARGS[@]}" \
   "${JUDGE_ARGS[@]}" \
-  --output $OUTPUT_DIR/student_base_results.json \
+  --output $OUTPUT_DIR/results_base.json \
   --batch_judge
 
-python eval/plot_student_results.py --results-dir $OUTPUT_DIR --no-base
+python eval/plot_student_results.py --results-dir $OUTPUT_DIR
 
 echo DONE_ALL
