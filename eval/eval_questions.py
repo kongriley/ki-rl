@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "distill"))
@@ -36,15 +36,21 @@ def parse_args():
     p.add_argument("--model", type=str, default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--backend", choices=["hf", "openai"], default="hf",
                     help="Backend for the answering model")
-    p.add_argument("--judge_model", type=str, default=None,
-                    help="Judge model (defaults to --model)")
-    p.add_argument("--judge_backend", choices=["hf", "openai"], default=None,
-                    help="Backend for the judge (defaults to --backend)")
+    p.add_argument("--judge_model", type=str, default="gpt-5-mini",
+                    help="Judge model (None becomes --model, default: gpt-5-mini)")
+    p.add_argument("--judge_backend", choices=["hf", "openai"], default="openai",
+                    help="Backend for the judge (None becomes --backend, default: openai)")
     p.add_argument("--data_path", type=str, default="data/wiki_20/data.json")
     p.add_argument("--questions_path", type=str, default=None,
                     help="Path to pre-generated questions JSONL (mutually exclusive with --question_model)")
     p.add_argument("--icl", action="store_true",
                     help="ICL evaluation: ask questions with providing the passage")
+    p.add_argument("--rag", action="store_true",
+                    help="RAG evaluation: retrieve the passage via embedding similarity and ask with it in context")
+    p.add_argument("--embedding_model", type=str, default="Qwen/Qwen3-Embedding-8B",
+                    help="Embedding model used for RAG retrieval")
+    p.add_argument("--embedding_batch_size", type=int, default=2,
+                    help="Batch size for embedding inference")
     p.add_argument("--max_new_tokens", type=int, default=256)
     p.add_argument("--output", type=str, default=None)
     p.add_argument("--verbose", action="store_true")
@@ -142,6 +148,73 @@ def build_icl_prompt(article_text: str, question: str) -> str:
     return build_teacher_prompt(question, article_text)
 
 
+# ---------------------------------------------------------------------------
+# RAG retrieval
+# ---------------------------------------------------------------------------
+
+_RAG_TASK = "Given a query, retrieve relevant passages that answers the query"
+
+
+def _last_token_pool(last_hidden_states, attention_mask):
+    # Qwen3-Embedding uses the last non-pad token's hidden state as the embedding.
+    left_padding = (attention_mask[:, -1].sum() == attention_mask.shape[0])
+    if left_padding:
+        return last_hidden_states[:, -1]
+    seq_lens = attention_mask.sum(dim=1) - 1
+    b = last_hidden_states.shape[0]
+    return last_hidden_states[torch.arange(b, device=last_hidden_states.device), seq_lens]
+
+
+def _format_query(q: str) -> str:
+    return f"Instruct: {_RAG_TASK}\nQuery:{q}"
+
+
+def _embed_texts(texts, model, tokenizer, batch_size, max_length=8192):
+    embs = []
+    for i in tqdm(range(0, len(texts), batch_size), desc="Embedding"):
+        batch = texts[i:i + batch_size]
+        enc = tokenizer(
+            batch, padding=True, truncation=True,
+            max_length=max_length, return_tensors="pt",
+        ).to(model.device)
+        with torch.no_grad():
+            out = model(**enc)
+        e = _last_token_pool(out.last_hidden_state, enc["attention_mask"])
+        e = torch.nn.functional.normalize(e, p=2, dim=1)
+        embs.append(e.float().cpu())
+    return torch.cat(embs, dim=0)
+
+
+def retrieve_passages(articles, questions, embedding_model_name, batch_size=2):
+    """Embed every passage and question, return retrieved article id per question."""
+    import gc
+    print(f"Loading embedding model: {embedding_model_name}")
+    tokenizer = AutoTokenizer.from_pretrained(embedding_model_name, padding_side="left")
+    model = AutoModel.from_pretrained(
+        embedding_model_name, device_map="auto", torch_dtype=torch.bfloat16,
+    )
+    model.eval()
+
+    article_ids = list(articles.keys())
+    passage_texts = [articles[aid]["text"] for aid in article_ids]
+    print(f"Embedding {len(passage_texts)} passages...")
+    passage_embs = _embed_texts(passage_texts, model, tokenizer, batch_size)
+
+    query_texts = [_format_query(q["input"]) for q in questions]
+    print(f"Embedding {len(query_texts)} questions...")
+    query_embs = _embed_texts(query_texts, model, tokenizer, batch_size)
+
+    sims = query_embs @ passage_embs.T  # cosine similarity (inputs are L2-normalised)
+    best_idx = sims.argmax(dim=1).tolist()
+    retrieved = [article_ids[i] for i in best_idx]
+
+    del model, tokenizer
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return retrieved
+
+
 def build_blind_prompt(question: str) -> str:
     return build_student_prompt(question)
 
@@ -210,6 +283,12 @@ def _build_all_prompts(questions, articles, args, mode):
             article = articles.get(q["id"])
             if article is None:
                 print(f"Warning: no article for id={q['id']}, skipping")
+                continue
+            prompts.append(build_icl_prompt(article["text"], q["input"]))
+        elif mode == "rag":
+            article = articles.get(q["retrieved_id"])
+            if article is None:
+                print(f"Warning: retrieved id={q['retrieved_id']} missing, skipping")
                 continue
             prompts.append(build_icl_prompt(article["text"], q["input"]))
         else:
@@ -305,8 +384,28 @@ def run_evaluation(args):
 
     print(f"Loaded {len(articles)} articles, {len(questions)} questions (non-empty answers)")
 
-    mode = "icl" if args.icl else "closed-book"
+    if args.icl and args.rag:
+        raise SystemExit("--icl and --rag are mutually exclusive")
+    if args.rag:
+        mode = "rag"
+    elif args.icl:
+        mode = "icl"
+    else:
+        mode = "closed-book"
     print(f"Evaluation mode: {mode}")
+
+    # ---- RAG retrieval (embed passages + questions, pick best match) ----
+    if mode == "rag":
+        retrieved_ids = retrieve_passages(
+            articles, questions, args.embedding_model,
+            batch_size=args.embedding_batch_size,
+        )
+        retrieval_hits = 0
+        for q, rid in zip(questions, retrieved_ids):
+            q["retrieved_id"] = rid
+            retrieval_hits += int(rid == q["id"])
+        retrieval_acc = retrieval_hits / len(questions) if questions else 0.0
+        print(f"Retrieval accuracy: {retrieval_hits}/{len(questions)} ({retrieval_acc:.1%})")
 
     # ---- build prompts ----
     kept_questions, prompts = _build_all_prompts(questions, articles, args, mode)
@@ -335,6 +434,8 @@ def run_evaluation(args):
     judge_model_name = args.judge_model or args.model
     all_qs = [q["input"] for q in kept_questions]
     all_golds = [q["output"] for q in kept_questions]
+
+    print(f"Judge model: {judge_model_name}")
 
     if args.batch_judge:
         if args.judge_backend == "openai":
@@ -382,20 +483,29 @@ def run_evaluation(args):
     # ---- assemble results ----
     results = []
     correct = 0
+    retrieval_correct_total = 0
     for q, ma, (is_correct, verdict) in zip(kept_questions, model_answers, verdicts):
         correct += int(is_correct)
-        results.append({
+        row = {
             "id": q["id"],
             "question": q["input"],
             "gold_answer": q["output"],
             "model_answer": ma,
             "judge_verdict": verdict,
             "is_correct": is_correct,
-        })
+        }
+        if mode == "rag":
+            row["retrieved_id"] = q["retrieved_id"]
+            row["retrieval_correct"] = (q["retrieved_id"] == q["id"])
+            retrieval_correct_total += int(row["retrieval_correct"])
+        results.append(row)
 
         if args.verbose:
             print(f"\n{'='*60}")
-            print(f"[{q['id']}]  {'CORRECT' if is_correct else 'WRONG'}")
+            tag = f"[{q['id']}]"
+            if mode == "rag":
+                tag += f" (retrieved {q['retrieved_id']} {'OK' if row['retrieval_correct'] else 'MISS'})"
+            print(f"{tag}  {'CORRECT' if is_correct else 'WRONG'}")
             print(f"  Q: {q['input'][:150]}…")
             print(f"  Gold:  {q['output'][:150]}")
             print(f"  Model: {ma[:150]}")
@@ -404,6 +514,9 @@ def run_evaluation(args):
     accuracy = correct / total if total else 0.0
     print(f"\n{'='*60}")
     print(f"[{mode}] Overall: {correct}/{total} correct  ({accuracy:.1%})")
+    if mode == "rag":
+        ret_acc = retrieval_correct_total / total if total else 0.0
+        print(f"[{mode}] Retrieval: {retrieval_correct_total}/{total} correct  ({ret_acc:.1%})")
 
     per_passage = defaultdict(lambda: {"correct": 0, "total": 0})
     for r in results:
@@ -417,8 +530,12 @@ def run_evaluation(args):
 
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        payload = {"mode": mode, "accuracy": accuracy, "correct": correct, "total": total, "results": results}
+        if mode == "rag":
+            payload["retrieval_accuracy"] = retrieval_correct_total / total if total else 0.0
+            payload["retrieval_correct"] = retrieval_correct_total
         with open(args.output, "w") as f:
-            json.dump({"mode": mode, "accuracy": accuracy, "correct": correct, "total": total, "results": results}, f, indent=2)
+            json.dump(payload, f, indent=2)
         print(f"\nSaved to {args.output}")
 
     return accuracy, results
@@ -428,8 +545,6 @@ if __name__ == "__main__":
     args = parse_args()
     if args.judge_backend is None:
         args.judge_backend = args.backend
-    if args.question_model is None and args.questions_path is None:
-        args.questions_path = "data/wiki_20/gpt-5-mini_questions.jsonl"
-    if args.question_model and args.questions_path:
-        raise SystemExit("Specify --question_model or --questions_path, not both.")
+    if (args.question_model is None and args.questions_path is None) or (args.question_model and args.questions_path):
+        raise SystemExit("Specify either --question_model or --questions_path, not both.")
     run_evaluation(args)

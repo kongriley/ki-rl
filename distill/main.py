@@ -54,6 +54,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--output_dir", default="./distill/out/grpo_distill")
     p.add_argument("--question_model_path", type=str, default=None,
                    help="Path to a pre-trained question model. Skips question generator training and uses this model directly for question generation.")
+    p.add_argument("--skip_generator_training", action="store_true", default=False,
+                   help="Skip GRPO question-generator training and use --model_name as the question generator.")
     p.add_argument("--skip_first_iteration", action="store_true", default=False,
                    help="Skip the first iteration of the question generation loop.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
@@ -119,10 +121,14 @@ if __name__ == "__main__":
     dataset = load_dataset_json(args.dataset_path)
     assert len(dataset) > 0, "No dataset loaded"
 
-    skip_question_training = args.question_model_path is not None
+    skip_question_training = (
+        args.question_model_path is not None or args.skip_generator_training
+    )
 
     if args.eval_questions_path and args.eval_question_model:
         raise SystemExit("Specify --eval_questions_path or --eval_question_model, not both.")
+    if args.question_model_path and args.skip_generator_training:
+        raise SystemExit("Specify --question_model_path or --skip_generator_training, not both.")
 
     need_local_judge = (
         args.report_student_performance and args.eval_judge_backend == "hf"
@@ -240,8 +246,10 @@ if __name__ == "__main__":
                 print(f"Collected {len(new_qs)} good questions this iteration, "
                       f"{len(all_good_questions)} total accumulated")
 
-        if skip_question_training:
+        if args.question_model_path is not None:
             question_gen_path = args.question_model_path
+        elif args.skip_generator_training:
+            question_gen_path = args.model_name
         else:
             question_gen_path = os.path.join(args.output_dir, f"question_model_{i}")
 

@@ -114,7 +114,10 @@ def format_instruct_user_prompt(tokenizer, user_message: str) -> str:
 def parse_verdict(text: str) -> Tuple[bool, str]:
     v = text.lower().strip()
     is_correct = "correct" in v and "incorrect" not in v
-    return is_correct, text.strip()
+    is_incorrect = "incorrect" in v and "correct" not in v
+    if is_correct and is_incorrect:
+        warnings.warn(f"Ambiguous verdict for {text}")
+    return is_correct, v
 
 
 # ---------------------------------------------------------------------------
