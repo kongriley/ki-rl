@@ -7,6 +7,6 @@ torchrun --standalone --nproc_per_node=${NUM_GPUS} cpt.py \
     --block_size 2048 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
-    --num_train_epochs 3 \
-    --learning_rate 2e-5 \
+    --num_train_epochs 10 \
+    --learning_rate 5e-5 \
     --seed 42

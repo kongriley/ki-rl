@@ -26,6 +26,7 @@ METHOD_LABELS: dict[str, str] = {
     "base": "Closed-book base",
     "icl": "Oracle RAG (ICL)",
     "rag": "Normal RAG",
+    "cpt": "CPT",
     "student": "GRPO+Distill (Ours)",
     "student_model": "GRPO+Distill (Ours)",
 }

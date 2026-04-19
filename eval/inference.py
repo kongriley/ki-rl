@@ -26,7 +26,7 @@ def build_judge_prompt(question: str, reference_answer: str, student_answer: str
     return (
         "You are an impartial judge. Decide whether the student's answer agrees with "
         "the reference answer. The wording need not match exactly, "
-        "but all key facts must be present and accurate. "
+        "but all key facts must be present and accurate. If the student's answer has more information than the reference answer, it is still correct if it is consistent with the reference answer."
         "Respond with ONLY the single word 'correct' or 'incorrect'."
         "\n\n"
         f"<Question>\n{question}\n\n"
