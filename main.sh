@@ -17,7 +17,7 @@ DEBUG=
 python -u distill/main.py \
 	--dataset_path ./data/wiki_20/data.json \
 	--output_dir ./distill/out/distill_no_gen \
-	--num_generation_iterations 50 \
+	--num_generation_iterations 37 \
 	--num_question_generations 5 \
 	--num_questions_per_generation 5 \
 	--report_student_performance \

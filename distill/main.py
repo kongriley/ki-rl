@@ -89,6 +89,9 @@ def parse_args() -> argparse.Namespace:
                    help="Persist student model checkpoints and the final model to the output directory.")
     p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=False,
                    help="Persist question model checkpoints to the output directory.")
+    p.add_argument("--save_student_result_copy_dir", type=str, default="results",
+                   help="Directory to copy the result JSONs to. If not set, the results will not be copied.")
+    p.add_argument("--save_student_result_copy_name", type=str, default=None, help="Name of the result JSONs to copy, which will be inserted as results_(name)_(iteration_number).json. If not set, the name will default to student_model.")
     p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 for debugging")
     return p.parse_args()
 
@@ -480,6 +483,14 @@ if __name__ == "__main__":
             with open(results_path, "w", encoding="utf-8") as f:
                 json.dump(eval_summary, f, indent=2)
             print(f"Saved evaluation results to: {results_path}")
+
+            if args.save_student_result_copy_dir:
+                copy_name = args.save_student_result_copy_name or "student_model"
+                copy_name = f"results_{copy_name}_{i}.json"
+                copy_path = os.path.join(args.save_student_result_copy_dir, copy_name)
+                with open(copy_path, "w", encoding="utf-8") as f:
+                    json.dump(eval_summary, f, indent=2)
+                print(f"Copied evaluation results to: {copy_path}")
 
         student_model.to("cpu")
         if judge_model is not None:

@@ -22,14 +22,16 @@ from matplotlib.ticker import MaxNLocator
 
 
 # Map the ``x`` portion of ``results_{x}(_{i}).json`` to a display label.
-METHOD_LABELS: dict[str, str] = {
-    "base": "Closed-book base",
-    "icl": "Oracle RAG (ICL)",
-    "rag": "Normal RAG",
-    "cpt": "CPT",
-    "student": "GRPO+Distill (Ours)",
-    "student_model": "GRPO+Distill (Ours)",
-}
+# Order is preserved for legend / plot z-order (first row = top of legend).
+METHOD_SPECS: tuple[tuple[str, str], ...] = (
+    ("base", "Closed-book base"),
+    ("icl", "Oracle RAG (ICL)"),
+    ("rag", "Normal RAG"),
+    ("cpt", "CPT"),
+    ("no_gen", "Distill only (base generator)"),
+    ("student", "GRPO+Distill (Ours)"),
+    ("student_model", "GRPO+Distill (Ours)"),
+)
 
 
 _FILE_PATTERN = re.compile(r"^results_(?P<name>.+?)(?:_(?P<idx>\d+))?\.json$")
@@ -83,6 +85,25 @@ def _parse_label_overrides(specs: list[str]) -> dict[str, str]:
     return overrides
 
 
+def _method_label_map(overrides: dict[str, str]) -> dict[str, str]:
+    m = {name: label for name, label in METHOD_SPECS}
+    m.update(overrides)
+    return m
+
+
+def _legend_label_order(present: set[str]) -> list[str]:
+    """Display labels in METHOD_SPECS order, then any others alphabetically."""
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for _, lbl in METHOD_SPECS:
+        if lbl in present and lbl not in seen:
+            ordered.append(lbl)
+            seen.add(lbl)
+    for lbl in sorted(present - seen):
+        ordered.append(lbl)
+    return ordered
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
@@ -126,7 +147,7 @@ def main() -> None:
     args = p.parse_args()
 
     results_dir: Path = args.results_dir
-    label_map = {**METHOD_LABELS, **_parse_label_overrides(args.label)}
+    label_map = _method_label_map(_parse_label_overrides(args.label))
 
     discovered = _discover(results_dir)
     if not discovered:
@@ -184,54 +205,57 @@ def main() -> None:
         }
     )
 
-    fig, ax = plt.subplots(figsize=(5.6, 2.8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(5.6, 3.2), constrained_layout=True)
 
-    color_cycle = plt.get_cmap("tab10").colors
+    color_cycle = plt.get_cmap("Dark2").colors
     ci = 0
+    plot_labels = _legend_label_order(set(trajectories) | set(references))
 
-    for label, points in trajectories.items():
-        color = color_cycle[ci % len(color_cycle)]
-        ci += 1
-        xs = [i for i, _ in points]
-        ys = [v for _, v in points]
-        ax.plot(
-            xs,
-            ys,
-            color=color,
-            linewidth=1.8,
-            marker="o",
-            markersize=4.6,
-            markerfacecolor="white",
-            markeredgecolor=color,
-            markeredgewidth=1.2,
-            label=label,
-            zorder=3,
-        )
-        if args.annotate and ys:
-            best = max(range(len(ys)), key=lambda k: ys[k])
-            for k in sorted({0, len(ys) - 1, best}):
-                ax.annotate(
-                    f"{ys[k]:.1f}",
-                    xy=(xs[k], ys[k]),
-                    xytext=(0, 6),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    color=color,
-                )
-
-    for label, value in references.items():
-        color = color_cycle[ci % len(color_cycle)]
-        ci += 1
-        ax.axhline(
-            value,
-            color=color,
-            linestyle="--",
-            linewidth=1.4,
-            label=f"{label}",
-            zorder=2,
-        )
+    for label in plot_labels:
+        if label in trajectories:
+            points = trajectories[label]
+            color = color_cycle[ci % len(color_cycle)]
+            ci += 1
+            xs = [i for i, _ in points]
+            ys = [v for _, v in points]
+            ax.plot(
+                xs,
+                ys,
+                color=color,
+                linewidth=1.8,
+                # marker="o",
+                # markersize=4.6,
+                # markerfacecolor="white",
+                # markeredgecolor=color,
+                # markeredgewidth=1.2,
+                label=label,
+                zorder=3,
+            )
+            if args.annotate and ys:
+                best = max(range(len(ys)), key=lambda k: ys[k])
+                for k in sorted({0, len(ys) - 1, best}):
+                    ax.annotate(
+                        f"{ys[k]:.1f}",
+                        xy=(xs[k], ys[k]),
+                        xytext=(0, 6),
+                        textcoords="offset points",
+                        ha="center",
+                        va="bottom",
+                        fontsize=8,
+                        color=color,
+                    )
+        elif label in references:
+            value = references[label]
+            color = color_cycle[ci % len(color_cycle)]
+            ci += 1
+            ax.axhline(
+                value,
+                color=color,
+                linestyle="--",
+                linewidth=1.4,
+                label=f"{label}",
+                zorder=2,
+            )
 
     all_values: list[float] = [v for pts in trajectories.values() for _, v in pts]
     all_values.extend(references.values())
@@ -248,7 +272,7 @@ def main() -> None:
 
     ax.set_xlabel("Checkpoint")
     ax.set_ylabel("Accuracy (%)")
-    ax.set_title("Closed-book accuracy")
+    ax.set_title("Model accuracy on wiki_20")
     ax.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.3)
     ax.set_axisbelow(True)
 
