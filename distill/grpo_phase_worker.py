@@ -50,8 +50,8 @@ from generate_questions import (  # noqa: E402
 
 FORMAT_PENALTY = -2.0
 PRESIDIO_PENALTY = -1.5
-EASY_PENALTY = -1.0
-GARBAGE_PENALTY = -0.5
+EASY_PENALTY = -0.5
+GARBAGE_PENALTY = -1.0
 GOOD_REWARD = 1.0
 
 

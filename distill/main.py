@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
                    help="When --accumulate_questions is set, cap on how many of the previous "
                         "iteration's questions to include per passage in the prompt. "
                         "If unset, include all of the previous iteration's questions for the passage.")
+    p.add_argument("--use_good_questions", action=argparse.BooleanOptionalAction, default=True,
+                   help="If set (default), good questions discovered during GRPO training are "
+                        "included in this iteration's distillation dataset (reset each iteration). "
+                        "If unset, the good-question pool is not tracked at all and every "
+                        "distillation row comes from the deficit question generator.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
     p.add_argument("--num_train_epochs", type=float, default=1)
@@ -251,11 +256,12 @@ if __name__ == "__main__":
         if grpo_ran:
             gq_path = os.path.join(args.output_dir, f"_good_questions_{i}.jsonl")
             if os.path.exists(gq_path):
-                with open(gq_path) as f:
-                    new_qs = [json.loads(line) for line in f if line.strip()]
-                all_good_questions.extend(new_qs)
+                if args.use_good_questions:
+                    with open(gq_path) as f:
+                        new_qs = [json.loads(line) for line in f if line.strip()]
+                    all_good_questions.extend(new_qs)
+                    print(f"Collected {len(new_qs)} good questions this iteration")
                 os.remove(gq_path)
-                print(f"Collected {len(new_qs)} good questions this iteration")
 
         if args.question_model_path is not None:
             question_gen_path = args.question_model_path

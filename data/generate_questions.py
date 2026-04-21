@@ -40,26 +40,30 @@ def _create_question_prompt(
 
     Generate {num_questions} *different* question{plural} that DO NOT duplicate or paraphrase any of the previous questions, and that cover different aspects of the passage. Any repeat is a failure.
 """
-    return f"""
-    Using the following passage, generate {num_questions} question{plural} about the passage, along with their answers.
-    This question will be used in a separate examination, where the students are not given the passage. The questions should be challenging and not be easily answered by the passage. Keep the questions short and concise.
+    return f"""Read the passage below and generate {num_questions} question{plural} with answer{plural} based ONLY on the passage content.
 
-    Each question must be fully self-contained and understandable on its own, without needing the passage for context. Include specific names, dates, and topics directly in the question so a reader can understand exactly what is being asked. It should also not contain extraneous information that is not in the passage.
-    - Bad: "Who was appointed after the resignation?" (unclear who or what)
-    - Good: "Who was appointed CEO of OpenAI after Sam Altman's brief resignation in November 2023?" (self-contained)
+Requirements:
+- Each question must be self-contained: include specific names, dates, and topics so a reader who has NOT seen the passage can understand what is being asked.
+- Questions should be challenging and test comprehension, not just copy sentences from the passage.
+- Answers must be factually grounded in the passage.
+- Keep questions and answers concise.
+- Do NOT copy the format example below as your answer. Your questions must be about the passage.
 {previous_block}
-    Format your response as:
-    Question 1: <your question>
-    Answer 1: <the answer>
-    ...
-    Question {num_questions}: <your question>
-    Answer {num_questions}: <the answer>
+Output format (use exactly this tag structure, one pair per question):
+<Question> [your question here]
+<Answer> [your answer here]
 
-    <Passage>
-    {text}
+Example of the output format (DO NOT use this content — generate your own from the passage):
+<Question> What year was the Eiffel Tower completed, and how tall is it?
+<Answer> The Eiffel Tower was completed in 1889 and stands 330 meters tall.
 
-    <Response>
-    """
+Now read the passage and generate {num_questions} original question{plural}.
+
+<Passage>
+{text}
+
+<Response>
+"""
 
 
 def _build_prompt_conversation(prompt: str):
@@ -71,17 +75,17 @@ def _build_prompt_conversation(prompt: str):
 # ---------------------------------------------------------------------------
 
 def _parse_question_answer(text: str) -> Tuple[str, str]:
-    """Extract a single (question, answer) from generated text with 'Question [N]:' / 'Answer [N]:' prefixes."""
-    q_match = re.search(r"Question\s*\d*:\s*(.+?)(?=\n\s*Answer\s*\d*:|\Z)", text, re.DOTALL)
-    a_match = re.search(r"Answer\s*\d*:\s*(.+?)(?=\n\s*Question\s*\d*:|\Z)", text, re.DOTALL)
+    """Extract a single (question, answer) from generated text with <Question>/<Answer> tags."""
+    q_match = re.search(r"<Question>\s*(.+?)(?=\n\s*<Answer>|\Z)", text, re.DOTALL)
+    a_match = re.search(r"<Answer>\s*(.+?)(?=\n\s*<Question>|\Z)", text, re.DOTALL)
     question = q_match.group(1).strip() if q_match else text.strip()
     answer = a_match.group(1).strip() if a_match else ""
     return question, answer
 
 
 def _parse_question_answers(text: str) -> List[Tuple[str, str]]:
-    """Extract all (question, answer) pairs from text with numbered 'Question N:' / 'Answer N:' format."""
-    pattern = r"Question\s*\d*:\s*(.+?)\s*Answer\s*\d*:\s*(.+?)(?=Question\s*\d*:|\Z)"
+    """Extract all (question, answer) pairs from text with <Question>/<Answer> tags."""
+    pattern = r"<Question>\s*(.+?)\s*<Answer>\s*(.+?)(?=<Question>|\Z)"
     matches = re.findall(pattern, text, re.DOTALL)
     if matches:
         return [(q.strip(), a.strip()) for q, a in matches]
@@ -116,7 +120,7 @@ def generate_questions(
     num_question_generations: int,
     num_questions_per_generation: int = 5,
     temperature: float = 1.2,
-    max_retries: int = 3,
+    max_retries: int = 5,
     tensor_parallel_size: int = 1,
 ) -> list:
     from vllm import LLM, SamplingParams

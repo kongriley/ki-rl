@@ -16,6 +16,7 @@ common_args=(
 	--eval_judge_backend hf
 	--eval_judge_model gpt-5-mini
 	--save_student_result_copy_dir ./results
+	--no-use_good_questions # don't accumulate good questions across iterations
 )
 
 case "$MODE" in
