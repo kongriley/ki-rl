@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
                         "distillation row comes from the deficit question generator.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
-    p.add_argument("--num_train_epochs", type=float, default=1)
+    p.add_argument("--num_distill_epochs", type=float, default=1)
     p.add_argument("--num_grpo_generations", type=int, default=4,
                    help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
     p.add_argument("--max_completion_length", type=int, default=512)
@@ -378,7 +378,7 @@ if __name__ == "__main__":
             gradient_accumulation_steps=distil_grad_accum,
             max_prompt_length=1024,
             max_completion_length=args.max_completion_length,
-            num_train_epochs=args.num_train_epochs,
+            num_train_epochs=args.num_distill_epochs,
             save_strategy="no",
             max_grad_norm=1,
             report_to="none",
