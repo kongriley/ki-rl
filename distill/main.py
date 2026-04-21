@@ -58,6 +58,14 @@ def parse_args() -> argparse.Namespace:
                    help="Skip GRPO question-generator training and use --model_name as the question generator.")
     p.add_argument("--skip_first_iteration", action="store_true", default=False,
                    help="Skip the first iteration of the question generation loop.")
+    p.add_argument("--accumulate_questions", action="store_true", default=False,
+                   help="In Phase 2, append the previous iteration's generated questions for each "
+                        "passage to the question-generation prompt and instruct the model to produce "
+                        "different ones. Has no effect in the first iteration.")
+    p.add_argument("--num_accumulated_questions", type=int, default=None,
+                   help="When --accumulate_questions is set, cap on how many of the previous "
+                        "iteration's questions to include per passage in the prompt. "
+                        "If unset, include all of the previous iteration's questions for the passage.")
     p.add_argument("--learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
     p.add_argument("--num_train_epochs", type=float, default=1)
@@ -89,7 +97,7 @@ def parse_args() -> argparse.Namespace:
                    help="Persist student model checkpoints and the final model to the output directory.")
     p.add_argument("--save_question_model", action=argparse.BooleanOptionalAction, default=False,
                    help="Persist question model checkpoints to the output directory.")
-    p.add_argument("--save_student_result_copy_dir", type=str, default="results",
+    p.add_argument("--save_student_result_copy_dir", type=str, default=None,
                    help="Directory to copy the result JSONs to. If not set, the results will not be copied.")
     p.add_argument("--save_student_result_copy_name", type=str, default=None, help="Name of the result JSONs to copy, which will be inserted as results_(name)_(iteration_number).json. If not set, the name will default to student_model.")
     p.add_argument("--debug", action="store_true", default=False, help="Changes max steps to 1 for debugging")
@@ -155,9 +163,10 @@ if __name__ == "__main__":
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    all_good_questions = []
+    prev_generated_by_id: Dict[str, list] = {}
 
     for i in range(args.num_generation_iterations):
+        all_good_questions = []
         # ── Phase 1: Question model training (GRPO subprocess) ──
         # Runs in a subprocess so each iteration gets a clean CUDA context
         # (vLLM colocated MemPool is a per-process singleton).
@@ -238,7 +247,7 @@ if __name__ == "__main__":
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
 
-        # Accumulate good questions discovered during GRPO training.
+        # Collect good questions discovered during this iteration's GRPO training.
         if grpo_ran:
             gq_path = os.path.join(args.output_dir, f"_good_questions_{i}.jsonl")
             if os.path.exists(gq_path):
@@ -246,8 +255,7 @@ if __name__ == "__main__":
                     new_qs = [json.loads(line) for line in f if line.strip()]
                 all_good_questions.extend(new_qs)
                 os.remove(gq_path)
-                print(f"Collected {len(new_qs)} good questions this iteration, "
-                      f"{len(all_good_questions)} total accumulated")
+                print(f"Collected {len(new_qs)} good questions this iteration")
 
         if args.question_model_path is not None:
             question_gen_path = args.question_model_path
@@ -271,11 +279,27 @@ if __name__ == "__main__":
             total_deficit = sum(deficit_counts.values())
             print(f"Generating questions for {len(deficit_counts)}/{len(dataset)} passages "
                   f"({total_deficit} total deficit, have {len(all_good_questions)} good)")
+            if args.accumulate_questions and i > 0 and prev_generated_by_id:
+                k = args.num_accumulated_questions
+                previous_questions_by_id = {}
+                for pid, qs in prev_generated_by_id.items():
+                    if not qs:
+                        continue
+                    selected = qs if k is None else qs[-k:] if k > 0 else []
+                    if selected:
+                        previous_questions_by_id[pid] = [q["question"] for q in selected]
+                if previous_questions_by_id:
+                    cap_str = "all" if k is None else f"up to {k}"
+                    print(f"Accumulating {cap_str} previous questions for "
+                          f"{len(previous_questions_by_id)} passages")
+            else:
+                previous_questions_by_id = None
             generated_dataset = build_question_dataset_for_deficits(
                 question_gen_path, args.model_name, dataset,
                 deficit_counts, args.num_questions_per_generation,
                 student_prompt_fn=build_student_prompt,
                 teacher_prompt_fn=build_teacher_prompt,
+                previous_questions_by_id=previous_questions_by_id,
             )
         else:
             generated_dataset = None
@@ -296,6 +320,15 @@ if __name__ == "__main__":
             for idx in range(len(generated_dataset)):
                 rows.append(dict(generated_dataset[idx]))
         question_dataset = Dataset.from_list(rows)
+
+        if args.accumulate_questions:
+            prev_generated_by_id = {}
+            if generated_dataset is not None:
+                for idx in range(len(generated_dataset)):
+                    row = generated_dataset[idx]
+                    prev_generated_by_id.setdefault(row["id"], []).append(
+                        {"question": row["question"], "answer": row["answer"]}
+                    )
         print(f"Distillation dataset: {len(all_good_questions)} good questions"
               + (f" + {len(generated_dataset)} generated" if generated_dataset else "")
               + f" = {len(question_dataset)} total")

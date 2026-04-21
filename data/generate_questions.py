@@ -5,7 +5,7 @@ import multiprocessing as mp
 import os
 import re
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from datasets import Dataset
@@ -24,15 +24,30 @@ def load_dataset_json(data_path: str) -> Dict:
 # Prompt construction
 # ---------------------------------------------------------------------------
 
-def _create_question_prompt(text: str, num_questions: int = 1) -> str:
+def _create_question_prompt(
+    text: str,
+    num_questions: int = 1,
+    previous_questions: Optional[List[str]] = None,
+) -> str:
+    plural = '' if num_questions == 1 else 's'
+    previous_block = ""
+    if previous_questions:
+        prev_list = "\n".join(f"    - {q}" for q in previous_questions)
+        previous_block = f"""
+    The following question{'' if len(previous_questions) == 1 else 's'} {'was' if len(previous_questions) == 1 else 'were'} previously created for this passage. 
+    <Previous questions>
+{prev_list}
+
+    Generate {num_questions} *different* question{plural} that DO NOT duplicate or paraphrase any of the previous questions, and that cover different aspects of the passage. Any repeat is a failure.
+"""
     return f"""
-    Using the following passage, generate {num_questions} question{'' if num_questions == 1 else 's'} about the passage, along with their answers.
+    Using the following passage, generate {num_questions} question{plural} about the passage, along with their answers.
     This question will be used in a separate examination, where the students are not given the passage. The questions should be challenging and not be easily answered by the passage. Keep the questions short and concise.
 
     Each question must be fully self-contained and understandable on its own, without needing the passage for context. Include specific names, dates, and topics directly in the question so a reader can understand exactly what is being asked. It should also not contain extraneous information that is not in the passage.
     - Bad: "Who was appointed after the resignation?" (unclear who or what)
     - Good: "Who was appointed CEO of OpenAI after Sam Altman's brief resignation in November 2023?" (self-contained)
-
+{previous_block}
     Format your response as:
     Question 1: <your question>
     Answer 1: <the answer>
@@ -174,17 +189,32 @@ def generate_questions_for_deficits(
     num_questions_per_generation: int = 5,
     temperature: float = 1.2,
     max_retries: int = 3,
+    previous_questions_by_id: Optional[Dict[str, List[str]]] = None,
 ) -> list:
     """Generate questions only for passages that still need them.
 
     ``deficit_counts`` maps passage id -> number of additional questions needed.
     Passages not present (or with count <= 0) are skipped entirely.
+
+    ``previous_questions_by_id`` optionally maps passage id -> list of questions
+    generated for that passage in a previous iteration. When provided, these
+    are appended to the prompt with an instruction to generate different
+    questions.
     """
     from vllm import LLM, SamplingParams
 
     deficit_counts = {pid: n for pid, n in deficit_counts.items() if n > 0}
     if not deficit_counts:
         return []
+
+    prev_qs_by_id: Dict[str, List[str]] = previous_questions_by_id or {}
+
+    def _prompt_for(pid: str) -> str:
+        return _create_question_prompt(
+            dataset[pid],
+            num_questions=num_questions_per_generation,
+            previous_questions=prev_qs_by_id.get(pid),
+        )
 
     max_needed = max(deficit_counts.values())
     n = max(1, math.ceil(max_needed / num_questions_per_generation))
@@ -212,10 +242,7 @@ def generate_questions_for_deficits(
     )
 
     all_ids = list(deficit_counts.keys())
-    all_prompts = [
-        _create_question_prompt(dataset[pid], num_questions=num_questions_per_generation)
-        for pid in all_ids
-    ]
+    all_prompts = [_prompt_for(pid) for pid in all_ids]
 
     questions_by_id: Dict[str, list] = {pid: [] for pid in all_ids}
 
@@ -230,10 +257,7 @@ def generate_questions_for_deficits(
             ]
             if not pending_ids:
                 break
-            pending_prompts = [
-                _create_question_prompt(dataset[pid], num_questions=num_questions_per_generation)
-                for pid in pending_ids
-            ]
+            pending_prompts = [_prompt_for(pid) for pid in pending_ids]
             print(f"  Retry {attempt}/{max_retries}: regenerating for "
                   f"{len(pending_ids)} passages with insufficient questions")
 
@@ -357,10 +381,12 @@ def build_question_dataset(
 def _run_generate_questions_for_deficits(args_and_queue):
     """Subprocess target: generates deficit questions in a fresh CUDA context."""
     (model_name_or_path, tokenizer_name, dataset, deficit_counts,
-     num_questions_per_generation, temperature, queue) = args_and_queue
+     num_questions_per_generation, temperature, previous_questions_by_id,
+     queue) = args_and_queue
     results = generate_questions_for_deficits(
         model_name_or_path, tokenizer_name, dataset,
         deficit_counts, num_questions_per_generation, temperature,
+        previous_questions_by_id=previous_questions_by_id,
     )
     queue.put(results)
 
@@ -373,10 +399,15 @@ def build_question_dataset_for_deficits(
     num_questions_per_generation: int = 5,
     student_prompt_fn=None,
     teacher_prompt_fn=None,
+    previous_questions_by_id: Optional[Dict[str, List[str]]] = None,
 ) -> Dataset:
     """Generate questions for passages with deficits in a subprocess and build a HF Dataset.
 
     ``deficit_counts`` maps passage id -> number of additional questions needed.
+
+    ``previous_questions_by_id`` optionally maps passage id -> list of previously
+    generated questions. When provided, the generation prompt is augmented with
+    these and asks for different questions (see ``_create_question_prompt``).
     """
     deficit_counts = {pid: n for pid, n in deficit_counts.items() if n > 0}
     if not deficit_counts:
@@ -387,7 +418,8 @@ def build_question_dataset_for_deficits(
     p = ctx.Process(
         target=_run_generate_questions_for_deficits,
         args=((model_name_or_path, tokenizer_name, dataset,
-               deficit_counts, num_questions_per_generation, 1.2, queue),),
+               deficit_counts, num_questions_per_generation, 1.2,
+               previous_questions_by_id, queue),),
     )
     p.start()
     questions = queue.get()
