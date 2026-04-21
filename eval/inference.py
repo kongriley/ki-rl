@@ -12,27 +12,28 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 
 def build_student_prompt(question: str) -> str:
-    return f"<Question>\n{question}\n\n<Answer>"
+    return f"Q: {question}\nA:"
 
 
 def build_teacher_prompt(question: str, document: str) -> str:
     return (
-        "Read the following passage carefully, then answer the question.\n\n"
-        f"<Passage>\n{document}\n\n"
-    ) + build_student_prompt(question)
+        f"Read the following passage, then answer the question.\n\n"
+        f"Passage:\n{document}\n\n"
+        f"Q: {question}\nA:"
+    )
 
 
 def build_judge_prompt(question: str, reference_answer: str, student_answer: str) -> str:
     return (
-        "You are an impartial judge. Decide whether the student's answer agrees with "
-        "the reference answer. The wording need not match exactly, "
-        "but all key facts must be present and accurate. If the student's answer has more information than the reference answer, it is still correct if it is consistent with the reference answer."
-        "Respond with ONLY the single word 'correct' or 'incorrect'."
-        "\n\n"
-        f"<Question>\n{question}\n\n"
-        f"<Reference Answer>\n{reference_answer}\n\n"
-        f"<Student's Answer>\n{student_answer}\n\n"
-        "<Verdict>"
+        "Decide whether the student's answer agrees with the reference answer. "
+        "The wording need not match exactly, but all key facts must be present and accurate. "
+        "If the student's answer has more information than the reference answer, "
+        "it is still correct if it is consistent with the reference answer. "
+        "Respond with ONLY the single word 'correct' or 'incorrect'.\n\n"
+        f"Q: {question}\n"
+        f"Reference: {reference_answer}\n"
+        f"Student: {student_answer}\n"
+        f"Verdict:"
     )
 
 
@@ -43,9 +44,9 @@ def build_batched_judge_prompt(
 ) -> str:
     """Build a single prompt that asks the judge to evaluate N triples at once."""
     header = (
-        "You are an impartial judge. For each numbered item below, decide whether "
-        "the student's answer agrees with the reference answer. The wording need not "
-        "match exactly, but all key facts must be present and accurate.\n"
+        "For each numbered item below, decide whether the student's answer agrees "
+        "with the reference answer. The wording need not match exactly, but all key "
+        "facts must be present and accurate.\n"
         "Respond with ONLY a numbered list, one verdict per line, in the format:\n"
         "1. correct\n"
         "2. incorrect\n"
@@ -55,11 +56,11 @@ def build_batched_judge_prompt(
     for i, (q, ref, sa) in enumerate(zip(questions, references, student_answers), 1):
         items.append(
             f"{i}.\n"
-            f"<Question>\n{q}\n\n"
-            f"<Reference Answer>\n{ref}\n\n"
-            f"<Student's Answer>\n{sa}\n"
+            f"Q: {q}\n"
+            f"Reference: {ref}\n"
+            f"Student: {sa}"
         )
-    return header + "\n".join(items)
+    return header + "\n\n".join(items)
 
 
 def parse_batched_verdicts(

@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
                         "Mutually exclusive with --eval_questions_path.")
     p.add_argument("--eval_question_backend", choices=["hf", "openai"], default="openai",
                    help="Backend for eval question generation (default: openai).")
-    p.add_argument("--eval_num_questions", type=int, default=3,
+    p.add_argument("--eval_num_questions", type=int, default=5,
                    help="Number of questions per passage when generating eval questions on-the-fly.")
     p.add_argument("--eval_judge_model", type=str, default=None,
                    help="Judge model name for evaluation (e.g. gpt-4o-mini). "

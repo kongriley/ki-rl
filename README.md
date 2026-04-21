@@ -18,7 +18,9 @@ The repo is organized as follows:
 - `eval`
     - `eval_questions.py` evaluates the trained models on a set of questions. This can also run the baseline approaches (closed-book base evaluation, ICL evaluation, RAG evaluation).
     - `plot_student_results.py` plots the results of the trained models.
-- `cpt.py` and `cpt.sh` run continued pretraining (next-token completion) on the passages. `sanity_check_cpt.py` makes sure the CPT model is actually training to the passages (that is, the perplexity of the CPT model is lower than the perplexity of the base model).
+- `baselines`
+    - `cpt.py` and `cpt.sh` run continued pretraining (next-token completion) on the passages. `sanity_check_cpt.py` makes sure the CPT model is actually training to the passages (that is, the perplexity of the CPT model is lower than the perplexity of the base model).
+    - `active_reading.py` runs active reading on the passages. 
 
 ## Hyperparameters
 

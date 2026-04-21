@@ -32,37 +32,27 @@ def _create_question_prompt(
     plural = '' if num_questions == 1 else 's'
     previous_block = ""
     if previous_questions:
-        prev_list = "\n".join(f"    - {q}" for q in previous_questions)
+        prev_list = "\n".join(f"- {q}" for q in previous_questions)
         previous_block = f"""
-    The following question{'' if len(previous_questions) == 1 else 's'} {'was' if len(previous_questions) == 1 else 'were'} previously created for this passage. 
-    <Previous questions>
+The following question{'' if len(previous_questions) == 1 else 's'} {'was' if len(previous_questions) == 1 else 'were'} already created for this passage:
 {prev_list}
 
-    Generate {num_questions} *different* question{plural} that DO NOT duplicate or paraphrase any of the previous questions, and that cover different aspects of the passage. Any repeat is a failure.
+Generate {num_questions} *different* question{plural} covering different aspects of the passage. Do not repeat any of the above.
 """
-    return f"""Read the passage below and generate {num_questions} question{plural} with answer{plural} based ONLY on the passage content.
+    return f"""Read the passage below, then write exactly {num_questions} question{plural} with short answer{plural}.
 
-Requirements:
-- Each question must be self-contained: include specific names, dates, and topics so a reader who has NOT seen the passage can understand what is being asked.
-- Questions should be challenging and test comprehension, not just copy sentences from the passage.
-- Answers must be factually grounded in the passage.
-- Keep questions and answers concise.
-- Do NOT copy the format example below as your answer. Your questions must be about the passage.
+Rules:
+- Each question must include enough context (names, dates, topics) to be answerable without the passage.
+- Each answer must be a short, factual response grounded in the passage.
+- Do not copy text verbatim from the passage as your question.
 {previous_block}
-Output format (use exactly this tag structure, one pair per question):
-<Question> [your question here]
-<Answer> [your answer here]
+Use this exact format for every pair (do not add any other tags or headers):
+Q: <your question>
+A: <your answer>
 
-Example of the output format (DO NOT use this content — generate your own from the passage):
-<Question> What year was the Eiffel Tower completed, and how tall is it?
-<Answer> The Eiffel Tower was completed in 1889 and stands 330 meters tall.
-
-Now read the passage and generate {num_questions} original question{plural}.
-
-<Passage>
+Passage:
 {text}
 
-<Response>
 """
 
 
@@ -75,25 +65,28 @@ def _build_prompt_conversation(prompt: str):
 # ---------------------------------------------------------------------------
 
 def _parse_question_answer(text: str) -> Tuple[str, str]:
-    """Extract a single (question, answer) from generated text with <Question>/<Answer> tags."""
-    q_match = re.search(r"<Question>\s*(.+?)(?=\n\s*<Answer>|\Z)", text, re.DOTALL)
-    a_match = re.search(r"<Answer>\s*(.+?)(?=\n\s*<Question>|\Z)", text, re.DOTALL)
-    question = q_match.group(1).strip() if q_match else text.strip()
-    answer = a_match.group(1).strip() if a_match else ""
-    return question, answer
+    """Extract a single (question, answer) pair from ``Q: … A: …`` text."""
+    q_match = re.search(r"Q:\s*(.+?)(?=\nA:|\Z)", text, re.DOTALL)
+    a_match = re.search(r"A:\s*(.+?)(?=\nQ:|\Z)", text, re.DOTALL)
+    if q_match and a_match:
+        return q_match.group(1).strip(), a_match.group(1).strip()
+    return text.strip(), ""
 
 
 def _parse_question_answers(text: str) -> List[Tuple[str, str]]:
-    """Extract all (question, answer) pairs from text with <Question>/<Answer> tags."""
-    pattern = r"<Question>\s*(.+?)\s*<Answer>\s*(.+?)(?=<Question>|\Z)"
-    matches = re.findall(pattern, text, re.DOTALL)
+    """Extract all (question, answer) pairs from ``Q: … A: …`` text."""
+    matches = re.findall(r"Q:\s*(.+?)\s*\nA:\s*(.+?)(?=\nQ:|\Z)", text, re.DOTALL)
     if matches:
         return [(q.strip(), a.strip()) for q, a in matches]
     return [_parse_question_answer(text)]
 
 
 def _is_valid_qa(question: str, answer: str) -> bool:
-    return len(question) >= 10 and len(answer) >= 1
+    if len(question) < 10 or len(answer) < 3:
+        return False
+    if re.search(r"Q:|A:", question) or re.search(r"Q:|A:", answer):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------

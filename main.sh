@@ -13,7 +13,7 @@ common_args=(
 	--num_questions_per_generation 5
 	--report_student_performance
 	--eval_questions_path ./data/wiki_20/gpt-5-mini_questions.jsonl
-	--eval_judge_backend hf
+	--eval_judge_backend openai
 	--eval_judge_model gpt-5-mini
 	--save_student_result_copy_dir ./results
 	--no-use_good_questions # don't accumulate good questions across iterations
