@@ -158,8 +158,11 @@ if __name__ == "__main__":
         torch_dtype=torch.bfloat16,
     )
     if need_local_judge:
+        judge_model_name = args.eval_judge_model
+        if judge_model_name is None:
+            judge_model_name = args.model_name
         judge_model = AutoModelForCausalLM.from_pretrained(
-            args.model_name,
+            judge_model_name,
             torch_dtype=torch.bfloat16,
         )
     else:
