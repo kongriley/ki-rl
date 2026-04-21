@@ -77,7 +77,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num_grpo_generations", type=int, default=4,
                    help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
     p.add_argument("--max_completion_length", type=int, default=512)
-    p.add_argument("--gradient_accumulation_steps", type=int, default=32)
+    p.add_argument("--grpo_gradient_accumulation_steps", type=int, default=32)
+    p.add_argument("--distill_gradient_accumulation_steps", type=int, default=32)
     p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=False,
                    help="Report student performance on the question dataset after distillation.")
     p.add_argument("--eval_questions_path", type=str, default=None,
@@ -191,7 +192,7 @@ if __name__ == "__main__":
             question_model_output = os.path.join(args.output_dir, f"question_model_{i}")
 
             num_prompts = len(dataset)
-            grpo_grad_accum = min(args.gradient_accumulation_steps, num_prompts)
+            grpo_grad_accum = min(args.grpo_gradient_accumulation_steps, num_prompts)
             grpo_grad_accum = max(grpo_grad_accum, args.num_grpo_generations)
             total_samples = int(num_prompts * args.num_grpo_generations * args.num_question_model_train_epochs)
             computed_max_steps = max(1, math.ceil(total_samples / grpo_grad_accum))
@@ -360,7 +361,7 @@ if __name__ == "__main__":
         dataset_path = os.path.join(args.output_dir, f"_questions_{i}.jsonl")
         question_dataset.to_json(dataset_path)
 
-        distil_grad_accum = min(args.gradient_accumulation_steps, len(question_dataset))
+        distil_grad_accum = min(args.distill_gradient_accumulation_steps, len(question_dataset))
         distil_kw = dict(
             seed=args.seed,
             use_vllm=True,

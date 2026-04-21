@@ -8,7 +8,7 @@ source .venv/bin/activate
 
 common_args=(
 	--dataset_path ./data/wiki_20/data.json
-	--num_generation_iterations 50
+	--num_generation_iterations 5
 	--num_question_generations 5
 	--num_questions_per_generation 5
 	--report_student_performance
@@ -17,7 +17,8 @@ common_args=(
 	--eval_judge_model gpt-5-mini
 	--save_student_result_copy_dir ./results
 	--use_good_questions
-	--accumulate_questions
+	--num_distill_epochs 1 # to test
+	--max_completion_length 256
 )
 
 case "$MODE" in

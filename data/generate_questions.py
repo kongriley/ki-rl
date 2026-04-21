@@ -37,21 +37,25 @@ def _create_question_prompt(
 The following question{'' if len(previous_questions) == 1 else 's'} {'was' if len(previous_questions) == 1 else 'were'} already created for this passage:
 {prev_list}
 
-Generate {num_questions} *different* question{plural} covering different aspects of the passage. Do not repeat any of the above.
+Generate {num_questions} *different* question{plural} covering different aspects of the passage. Do not repeat any of the above questions.
 """
-    return f"""Read the passage below, then write exactly {num_questions} question{plural} with short answer{plural}.
+    return f"""
+Read the passage below.
 
-Rules:
-- Each question must include enough context (names, dates, topics) to be answerable without the passage.
+<Passage>
+{text}
+</Passage>
+    
+Now write exactly {num_questions} question{plural} with corresponding answer{plural}.
+
+- Each question must include enough context (names, dates, topics) to be answerable without the passage, so a reader who has NOT seen the passage can understand what is being asked.
 - Each answer must be a short, factual response grounded in the passage.
 - Do not copy text verbatim from the passage as your question.
+
 {previous_block}
 Use this exact format for every pair (do not add any other tags or headers):
 Q: <your question>
 A: <your answer>
-
-Passage:
-{text}
 
 """
 
