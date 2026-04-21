@@ -16,7 +16,8 @@ common_args=(
 	--eval_judge_backend openai
 	--eval_judge_model gpt-5-mini
 	--save_student_result_copy_dir ./results
-	--no-use_good_questions # don't accumulate good questions across iterations
+	--use_good_questions
+	--accumulate_questions
 )
 
 case "$MODE" in

@@ -1,4 +1,4 @@
-MODE="base" # base, icl, rag
+MODE="icl" # base, icl, rag
 
 python eval/eval_questions.py \
     $(if [[ "$MODE" == "icl" || "$MODE" == "rag" ]]; then echo --${MODE}; fi) \

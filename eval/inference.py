@@ -12,14 +12,14 @@ from tqdm import tqdm
 # ---------------------------------------------------------------------------
 
 def build_student_prompt(question: str) -> str:
-    return f"Q: {question}\nA:"
+    return f"{question}\n"
 
 
 def build_teacher_prompt(question: str, document: str) -> str:
     return (
         f"Read the following passage, then answer the question.\n\n"
-        f"Passage:\n{document}\n\n"
-        f"Q: {question}\nA:"
+        f"<Passage>\n{document}\n\n"
+        f"<Question>\n{question}\n"
     )
 
 
