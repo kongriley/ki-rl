@@ -1,4 +1,4 @@
-MODE="icl" # base, icl, rag
+MODE="${1:-base}" # usage: ./eval_question_baselines.sh [base|icl|rag]
 
 python eval/eval_questions.py \
     $(if [[ "$MODE" == "icl" || "$MODE" == "rag" ]]; then echo --${MODE}; fi) \

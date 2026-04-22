@@ -71,7 +71,9 @@ def parse_args() -> argparse.Namespace:
                         "included in this iteration's distillation dataset (reset each iteration). "
                         "If unset, the good-question pool is not tracked at all and every "
                         "distillation row comes from the deficit question generator.")
-    p.add_argument("--learning_rate", type=float, default=2e-5)
+    p.add_argument("--grpo_beta", type=float, default=0.0)
+    p.add_argument("--grpo_learning_rate", type=float, default=2e-5)
+    p.add_argument("--distill_learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
     p.add_argument("--num_distill_epochs", type=float, default=1)
     p.add_argument("--num_grpo_generations", type=int, default=4,
@@ -199,12 +201,13 @@ if __name__ == "__main__":
 
             grpo_kw = dict(
                 seed=args.seed,
+                beta=grpo_beta,
                 use_vllm=True,
                 vllm_mode="colocate",
                 vllm_tensor_parallel_size=1,
                 vllm_gpu_memory_utilization=0.3,
                 vllm_enable_sleep_mode=True,
-                learning_rate=args.learning_rate,
+                learning_rate=args.grpo_learning_rate,
                 warmup_ratio=0.1,
                 lr_scheduler_type="cosine",
                 logging_steps=1,
@@ -369,7 +372,7 @@ if __name__ == "__main__":
             vllm_tensor_parallel_size=1,
             vllm_gpu_memory_utilization=0.3,
             vllm_enable_sleep_mode=True,
-            learning_rate=args.learning_rate,
+            learning_rate=args.distill_learning_rate,
             warmup_ratio=0.1,
             lr_scheduler_type="cosine",
             logging_steps=1,

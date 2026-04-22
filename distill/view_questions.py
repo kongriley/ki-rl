@@ -11,6 +11,25 @@ from pathlib import Path
 from typing import Iterator, TextIO
 
 
+def load_article_titles(path: Path) -> dict[str, str]:
+    with path.open(encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, list):
+        raise ValueError(f"{path}: expected a JSON list of article objects")
+
+    id_to_title: dict[str, str] = {}
+    for i, item in enumerate(data, 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"{path}: entry {i} is not an object")
+        article_id = item.get("id")
+        title = item.get("title")
+        if article_id is None or title is None:
+            continue
+        id_to_title[str(article_id)] = str(title)
+    return id_to_title
+
+
 def iter_question_files(directory: Path) -> list[Path]:
     files = sorted(directory.glob("_questions_*.jsonl"), key=lambda p: int(p.stem.split("_")[-1]))
     return files
@@ -124,6 +143,13 @@ def main() -> int:
         print(e, file=sys.stderr)
         return 1
 
+    article_data_path = (Path.cwd() / "data/wiki_20/data.json").resolve()
+    try:
+        id_to_title = load_article_titles(article_data_path)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        print(f"Cannot load article titles from {article_data_path}: {e}", file=sys.stderr)
+        return 1
+
     if args.output is None:
         out_target: str | Path = default_output_path(path)
     else:
@@ -140,7 +166,8 @@ def main() -> int:
                     qid = row.get("id", "")
                     question = row.get("question", "")
                     answer = row.get("answer", "")
-                    out.write(f"\n[{idx}] id={qid}\n")
+                    title = id_to_title.get(str(qid), str(qid))
+                    out.write(f"\n[{idx}] title={title}\n")
                     out.write(question.rstrip() + "\n")
                     if not args.no_answer and answer != "":
                         out.write(f"answer: {answer}\n")

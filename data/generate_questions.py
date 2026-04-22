@@ -46,11 +46,14 @@ Read the passage below.
 {text}
 </Passage>
     
-Now write exactly {num_questions} question{plural} with corresponding answer{plural}.
+Write exactly {num_questions} question{plural} about the passage with corresponding answer{plural}.
 
-- Each question must include enough context (names, dates, topics) to be answerable without the passage, so a reader who has NOT seen the passage can understand what is being asked.
-- Each answer must be a short, factual response grounded in the passage.
-- Do not copy text verbatim from the passage as your question.
+Rules:
+- Each question must name the subject (people, places, works, dates) so someone who has NOT read the passage knows what is being asked.
+- Phrase questions directly (e.g. "When did …?", "Who designed …?"). Do not use meta phrases like "according to the passage", "as stated in the text", or "based on the above".
+- Each answer must be a short, factual response grounded in the passage. State only what is needed to answer the question.
+- Ground every answer in the passage. Use the same names and spellings as in the passage; do not add facts or citations not present in the passage.
+- Do not paste long quotes from the passage into the question; paraphrase the topic in your own words.
 
 {previous_block}
 Use this exact format for every pair (do not add any other tags or headers):
