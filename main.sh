@@ -18,6 +18,8 @@ common_args=(
 	--save_student_result_copy_dir ./results
 	--use_good_questions
 	--num_distill_epochs 1 # to test
+	--grpo_beta 0.001
+	--accumulate_questions
 )
 
 case "$MODE" in
@@ -30,7 +32,6 @@ default)
 no_gen)
 	mode_args=(
 		--skip_generator_training
-		--accumulate_questions
 		--output_dir ./distill/out/distill_no_gen
 		--save_student_result_copy_name no_gen
 	)
