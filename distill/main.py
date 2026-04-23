@@ -176,8 +176,11 @@ if __name__ == "__main__":
 
     prev_generated_by_id: Dict[str, list] = {}
 
+    all_good_questions = []
+
     for i in range(args.num_generation_iterations):
-        all_good_questions = []
+        if not args.accumulate_questions:
+            all_good_questions = []
         # ── Phase 1: Question model training (GRPO subprocess) ──
         # Runs in a subprocess so each iteration gets a clean CUDA context
         # (vLLM colocated MemPool is a per-process singleton).
