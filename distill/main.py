@@ -201,7 +201,7 @@ if __name__ == "__main__":
 
             grpo_kw = dict(
                 seed=args.seed,
-                beta=grpo_beta,
+                beta=args.grpo_beta,
                 use_vllm=True,
                 vllm_mode="colocate",
                 vllm_tensor_parallel_size=1,
