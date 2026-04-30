@@ -14,7 +14,7 @@ The repo is organized as follows:
     - `grpo_phase_worker.py` runs the GRPO phase in a subprocess.
     - `distil_config.py` and `distil_trainer.py` are pre-existing distillation code.
 - `data`
-    - `generate_questions.py` generates questions from Wikipedia passages.
+    - `generate_questions.py` generates questions from data in JSON format.
 - `eval`
     - `eval_questions.py` evaluates the trained models on a set of questions. This can also run the baseline approaches (closed-book base evaluation, ICL evaluation, RAG evaluation).
     - `plot_student_results.py` plots the results of the trained models.
@@ -45,3 +45,7 @@ The generated questions are evaluated using the student model with and without t
 There are some edge case rewards:
 - Sometimes the model will generate a question that is not in the expected format. In this case, the question is penalized by -2.0.
 - As a stopgap, sometimes the model will generate a PRESIDIO_ANONYMIZED token in the response in place of a proper noun. In this case, the question is penalized by -1.5.
+
+## Data format
+- 2025_disasters: articles of 2025 natural disasters truncated to 2,860 tokens: 2025 Myanmar earthquake, 2025 Kamchatka earthquake, 2025 Uttarakhand flash flood, Typhoon Kalmaegi, Tropical Storm Wipha, Cyclone Ditwah, Hurricane Melissa, 2025 Kentwood-Carson tornado, July 2025 Central Texas floods
+- wiki_20: 20 Wikipedia articles sourced from wikimedia/wikipedia

@@ -49,10 +49,9 @@ Read the passage below.
 Write exactly {num_questions} question{plural} about the passage with corresponding answer{plural}.
 
 Rules:
-- Each question must name the subject (people, places, works, dates) so someone who has NOT read the passage knows what is being asked.
-- Phrase questions directly (e.g. "When did …?", "Who designed …?"). Do not use meta phrases like "according to the passage", "as stated in the text", or "based on the above".
-- Each answer must be a short, factual response grounded in the passage. State only what is needed to answer the question.
-- Ground every answer in the passage. Use the same names and spellings as in the passage; do not add facts or citations not present in the passage.
+- Each question must name the subject (people, places, works, dates) fully and clearly so someone who has NOT read the passage knows what is being asked.
+- Phrase questions directly (e.g. "When did …?", "Who designed …?"). Do NOT use meta phrases like "according to the passage", "as stated in the text", or "based on the above".
+- Each answer must be a short, factual response grounded in the passage. State only what is needed to answer the question. Use the same names and spellings as in the passage; do not add facts or citations not present in the passage.
 - Do not paste long quotes from the passage into the question; paraphrase the topic in your own words.
 
 {previous_block}
@@ -192,7 +191,7 @@ def generate_questions_for_deficits(
     deficit_counts: Dict,
     num_questions_per_generation: int = 5,
     temperature: float = 1.2,
-    max_retries: int = 3,
+    max_retries: int = 5,
     previous_questions_by_id: Optional[Dict[str, List[str]]] = None,
 ) -> list:
     """Generate questions only for passages that still need them.

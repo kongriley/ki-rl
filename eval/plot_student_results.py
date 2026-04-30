@@ -144,6 +144,12 @@ def main() -> None:
         action="store_true",
         help="Annotate key points (first, best, last) per trajectory.",
     )
+    p.add_argument(
+        "--dataset-name",
+        type=str,
+        default="wiki_20",
+        help="Dataset name.",
+    )
     args = p.parse_args()
 
     results_dir: Path = args.results_dir
@@ -272,7 +278,7 @@ def main() -> None:
 
     ax.set_xlabel("Checkpoint")
     ax.set_ylabel("Accuracy (%)")
-    ax.set_title("Model accuracy on wiki_20")
+    ax.set_title(f"Model accuracy on {args.dataset_name}")
     ax.grid(axis="y", linestyle="--", linewidth=0.7, alpha=0.3)
     ax.set_axisbelow(True)
 

@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_generation_iterations", type=int, default=10, help="Number of times to run the generation loop")
     p.add_argument("--num_question_generations", type=int, default=10, help="Number of questions to generate for each passage. The total number of questions generated will be num_question_generations * len(dataset).")
-    p.add_argument("--num_questions_per_generation", type=int, default=8, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
+    p.add_argument("--num_questions_per_generation", type=int, default=5, help="Number of questions to request per LLM completion. This does not affect the total number of questions generated.")
     p.add_argument("--dataset_path", default="./data/wiki_20/data.json")
     p.add_argument("--model_name", default="allenai/OLMo-2-1124-7B-Instruct")
     p.add_argument("--output_dir", default="./distill/out/grpo_distill")
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num_grpo_generations", type=int, default=4,
                    help="Number of completions sampled per prompt during GRPO. Lower values reduce reward-function inference cost.")
     p.add_argument("--max_completion_length", type=int, default=512)
-    p.add_argument("--grpo_gradient_accumulation_steps", type=int, default=32)
+    p.add_argument("--grpo_gradient_accumulation_steps", type=int, default=8)
     p.add_argument("--distill_gradient_accumulation_steps", type=int, default=32)
     p.add_argument("--report_student_performance", action=argparse.BooleanOptionalAction, default=False,
                    help="Report student performance on the question dataset after distillation.")

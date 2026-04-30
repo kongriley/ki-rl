@@ -26,9 +26,8 @@ def build_teacher_prompt(question: str, document: str) -> str:
 def build_judge_prompt(question: str, reference_answer: str, student_answer: str) -> str:
     return (
         "Decide whether the student's answer agrees with the reference answer. "
-        "The wording need not match exactly, but all key facts must be present and accurate. "
-        "If the student's answer has more information than the reference answer, "
-        "it is still correct if it is consistent with the reference answer. "
+        "All key facts must be present and accurate, even if the wording does not match exactly or includes additional correct details. "
+        "The response is incorrect if it is wrong, misses the main point, or if it contains any incorrect facts."
         "Respond with ONLY the single word 'correct' or 'incorrect'.\n\n"
         f"Q: {question}\n"
         f"Reference: {reference_answer}\n"

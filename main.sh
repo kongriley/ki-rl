@@ -1,21 +1,24 @@
-LOG_DIR="./out/"
-DEBUG=
 
 # Usage: ./main.sh   or   MODE=no_gen ./main.sh
 MODE="${MODE:-default}"
 
+DATASET="thetech"
+LOG_DIR="./out/"
+DEBUG=
+
+
 source .venv/bin/activate
 
 common_args=(
-	--dataset_path ./data/wiki_20/data.json
+	--dataset_path ./data/${DATASET}/data.json
 	--num_generation_iterations 50
 	--num_question_generations 5
 	--num_questions_per_generation 5
 	--report_student_performance
-	--eval_questions_path ./data/wiki_20/gpt-5-mini_questions.jsonl
+	--eval_questions_path ./data/${DATASET}/gpt-5-mini_questions.jsonl
 	--eval_judge_backend openai
 	--eval_judge_model gpt-5-mini
-	--save_student_result_copy_dir ./results
+	--save_student_result_copy_dir ./results/${DATASET}
 	--use_good_questions
 	--num_distill_epochs 1 # to test
 	--grpo_beta 0.001
