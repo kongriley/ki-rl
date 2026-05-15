@@ -1,0 +1,808 @@
+{
+  "iteration": 16,
+  "accuracy": 0.44,
+  "correct": 44,
+  "total": 100,
+  "results": [
+    {
+      "question": "By how much did Course 6 MEng enrollment increase from 2016 to 2025?",
+      "reference_answer": "It increased by 41.4%, from 227 to 321 students.",
+      "student_answer": "Course 6 MEng enrollment increased by 41.4% from 2016 to 2025. The enrollment in 2016 was 227 students, and it peaked at 363 students in 2024 before dropping to 321 students in 2025. The increase from 2016 to 2025 can be calculated as follows:\n\n\\[ \\text{Increase} = 363 - 227 = 136 \\]\n\nThe percentage increase can be calculated using the formula:\n\n\\[ \\text{Percentage Increase} = \\left( \\frac{\\text{Increase}}{\\text{Original Value}} \\right) \\times 100 \\]\n\n\\[ \\text{Percentage Increase} = \\left( \\frac{136}{227} \\right) \\times 100 \\approx 59.86\\% \\]\n\nHowever, the passage states that the enrollment increased by 41.4% from 2016 to 2025, which might be an approximation or a rounded figure. The exact calculation based on the given data yields approximately 59.86%, but the passage provides the rounded figure of 41.4%.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "In what year did Course 6 MEng enrollment peak and what was the enrollment number that year?",
+      "reference_answer": "It peaked in 2024 at 363 students.",
+      "student_answer": "Course 6 MEng enrollment peaked in 2024 with 363 students.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "What was the percentage decrease in Course 6 MEng enrollment from 2024 to 2025?",
+      "reference_answer": "11.6% (from 363 to 321 students).",
+      "student_answer": "The percentage decrease in Course 6 MEng enrollment from 2024 to 2025 was 11.6%. This decrease was calculated by taking the difference in enrollment (from 363 in 2024 to 321 in 2025) and dividing it by the original number (363 in 2024), then multiplying by 100 to convert it to a percentage. The formula used was:\n\n\\[ \\text{Percentage Decrease} = \\left( \\frac{363 - 321}{363} \\right) \\times 100 \\]\n\n\\[ \\text{Percentage Decrease} = \\left( \\frac{42}{363} \\right) \\times 100 \\]\n\n\\[ \\text{Percentage Decrease} \\approx 11.6\\% \\]",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "When was the Course 6-14 S.B. founded and when was the Course 6-14 MEng introduced?",
+      "reference_answer": "The Course 6-14 S.B. was founded in 2017; the Course 6-14 MEng was introduced in 2022.",
+      "student_answer": "The Course 6-14 S.B. was founded in 2017. The Course 6-14 MEng was introduced in 2022.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "Who implemented the 5\u201310% funding cuts for MEng students enrolled in the 2025\u20132026 academic year, and when were the cuts implemented?",
+      "reference_answer": "President Kornbluth implemented the cuts in spring 2025.",
+      "student_answer": "President Kornbluth implemented the 5\u201310% funding cuts for MEng students enrolled in the 2025\u20132026 academic year. The cuts were implemented in the spring of 2025.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "By what percentage did Course 6 MEng enrollment change from 2016 to 2025?",
+      "reference_answer": "Increased by 41.4%.",
+      "student_answer": "Course 6 MEng enrollment increased by 41.4% from 2016 to 2025. This increase is calculated by taking the enrollment in 2025 (363 students) and dividing it by the enrollment in 2016 (263 students), then subtracting 1 to find the percentage increase: (363 / 263) - 1 = 0.4 or 40%. When expressed as a percentage, this is 40%. However, the passage states that the enrollment increased by 41.4%, which might be due to rounding or a specific calculation method used by the source.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "When did Course 6 MEng enrollment peak and what was the enrollment number at that peak?",
+      "reference_answer": "It peaked in 2024 at 363 students.",
+      "student_answer": "Course 6 MEng enrollment peaked at 363 students in 2024.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "What was the percentage decrease and numerical change in Course 6 MEng enrollment from 2024 to 2025?",
+      "reference_answer": "It decreased by 11.6%, falling from 363 to 321 students (a drop of 42 students).",
+      "student_answer": "From 2024 to 2025, Course 6 MEng enrollment decreased by 11.6% (from 363 to 321 students). The numerical change in enrollment was a decrease of 42 students (363 - 321 = 42).",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "When were the Course 6-9 S.B. and Course 6-9 MEng established?",
+      "reference_answer": "2019.",
+      "student_answer": "The Course 6-9 S.B. and Course 6-9 MEng were established in 2017.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "What funding cuts did President Kornbluth implement for MEng students enrolled in the 2025-2026 academic year?",
+      "reference_answer": "5-10% funding cuts across all academic and administrative units.",
+      "student_answer": "President Kornbluth implemented 5-10% funding cuts for MEng students enrolled in the 2025-2026 academic year. This decision was made in response to reductions in federal funding for MIT. The cuts affected all MEng students, including those in the Course 6-14 S.B. and MEng programs, and were implemented across all academic and administrative units. The specific details of how these cuts were distributed (e.g., whether they were applied uniformly across all MEng students or varied by program) were not explicitly stated in the passage provided. However, it is clear that the cuts were a direct result of the budget reductions and were intended to be applied broadly across the MEng student body.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "0b9ad218d0254b7f"
+    },
+    {
+      "question": "When will the first sitting of the 6.1200 ASE take place?",
+      "reference_answer": "In person from 1\u20134 p.m. on Jan. 26, 2026.",
+      "student_answer": "The first sitting of the 6.1200 ASE will take place on January 26, 2026, from 1-4 p.m.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "Which MIT majors list 6.1200 (Mathematics for Computer Science) as a degree requirement?",
+      "reference_answer": "6-3 and 6-4 majors.",
+      "student_answer": "The MIT majors that list 6.1200 (Mathematics for Computer Science) as a degree requirement include:\n\n- Course 6 (Computer Science)\n- Course 6-3 (Computer Science and Engineering)\n- Course 6-4 (Computer Science and Economics)\n- Course 6-5 (Computer Science and Mathematics)\n- Course 6-7 (Computer Science and Biology)\n- Course 6-8 (Computer Science and Economics)\n\nThese are the specific computer science-related majors at MIT that have 6.1200 as a degree requirement, as per the passage provided.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "What prerequisite will 6.1210 instructors require beginning in Spring 2026?",
+      "reference_answer": "That students have passed either 6.1200, or 6.1200A plus a probability course, or the 6.1200 ASE.",
+      "student_answer": "Beginning in Spring 2026, 6.1210 instructors will require students to have passed either 6.1200 or 6.1200A (Mathematics for Computer Science) with a grade of at least 3.0, or to have passed the 6.1200 ASE (Advanced Standing Exam) for Mathematics for Computer Science. This change is intended to create a clear and consistent prerequisite structure for further theoretical computer science courses, such as 6.1210 (Introduction to Algorithms), which is a requirement for many computer science majors at MIT.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "How often will the Theory of Computation Group offer the 6.1200 ASE?",
+      "reference_answer": "Once per year, during IAP.",
+      "student_answer": "The Theory of Computation Group will offer the 6.1200 ASE annually.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "What percentage of Course 6-3 students took 6.1210 in their first year?",
+      "reference_answer": "30.9%.",
+      "student_answer": "According to the passage, 68% of Course 6-3 students took 6.1210 in their first year. This information is derived from the statement: \"In 2025, 68% of the first-year students who were enrolled in Course 6-3 took 6.1210 in their first year.\" This percentage is directly provided in the passage and is based on the data from the 2025 academic year.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "When will the first sitting of the 6.1200 ASE (Mathematics for Computer Science) take place?",
+      "reference_answer": "In person from 1\u20134 p.m. on Jan. 26, 2026.",
+      "student_answer": "The first sitting of the 6.1200 ASE (Mathematics for Computer Science) will take place in person on January 26, 2026, from 1-4 p.m.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "Which MIT majors list the course 6.1200 (Mathematics for Computer Science) as a degree requirement?",
+      "reference_answer": "6-3 and 6-4 majors.",
+      "student_answer": "The MIT majors that list the course 6.1200 (Mathematics for Computer Science) as a degree requirement are:\n\n- Course 6 (Computer Science)\n- Course 6-3 (Computer Science and Engineering)\n- Course 6-4 (Computer Science and Economics)\n- Course 6-5 (Computer Science and Mathematics)\n- Course 6-7 (Computer Science and Biology)\n- Course 6-8 (Computer Science and Economics)\n\nThese are the specific computer science-related tracks within the broader Course 6 major that require students to take 6.1200 as part of their degree requirements. The course is designed to ensure that students have a solid foundation in discrete mathematics and proof writing, which is essential for further theoretical computer science studies.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "What prerequisite requirement will instructors of 6.1210 (Introduction to Algorithms) enforce beginning in Spring 2026?",
+      "reference_answer": "Students must have passed either 6.120[0], or 6.120[0]A plus a probability course, or the 6.120[0] ASE.",
+      "student_answer": "Instructors of 6.1210 (Introduction to Algorithms) will enforce the prerequisite requirement of having passed either 6.1200 (Mathematics for Computer Science) or 6.1200A (Mathematics for Computer Science, Advanced) beginning in Spring 2026. This change was announced in the EECS Department's posting about the updated prerequisites for 6.1210, indicating that students must have either completed 6.1200 or its advanced counterpart, 6.1200A, along with passing the 6.1200A exam, to be eligible for 6.1210. This new requirement is intended to create a more consistent and clear pathway for students entering MIT with prior experience in discrete mathematics and proof writing to proceed directly into the study of algorithms without needing to take additional courses or make up for gaps in their foundational knowledge.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "How often will the Theory of Computation Group offer the 6.1200 ASE?",
+      "reference_answer": "Once per year, during IAP.",
+      "student_answer": "The Theory of Computation Group will offer the 6.1200 ASE annually.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "What percentage of Course 6-3 students took 6.1210 in their first year?",
+      "reference_answer": "30.9%.",
+      "student_answer": "According to the passage, 68% of Course 6-3 students took 6.1210 in their first year. This information is derived from the statement: \"In 2025, 68% of the first-year students who were enrolled in Course 6-3 took 6.1210 in their first year.\" This percentage is directly provided in the context of discussing the enrollment and course-taking patterns among the first-year students in the MIT Course 6-3 program.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f0c16bdef8e0c1ab"
+    },
+    {
+      "question": "When did the first-ever MIT UROP Mixer take place?",
+      "reference_answer": "Tuesday, Oct. 28, 2025 from 3 p.m. to 5 p.m.",
+      "student_answer": "The first-ever MIT UROP Mixer took place on April 30, 2021.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "Where in the Stratton Student Center did the first-ever MIT UROP Mixer take place?",
+      "reference_answer": "On the second and third floors of the Stratton Student Center.",
+      "student_answer": "The first-ever MIT UROP Mixer took place in the Great Hall of the Stratton Student Center.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "How many potential UROP mentors were estimated to have been in attendance at the UROP Mixer?",
+      "reference_answer": "158 potential UROP mentors.",
+      "student_answer": "The UROP Mixer was attended by 30 potential UROP mentors, as mentioned in the text. These mentors were described as \"researchers, faculty, and graduate students\" who were present to connect with UROP students and potentially take on new UROP mentees. The specific number of mentors was given directly in the passage.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "What did Yin Min Goh, a graduate student in the Research Laboratory of Electronics in Course 6, hope undergraduate students would leverage in her research?",
+      "reference_answer": "The intrinsic benefits of analog hardware.",
+      "student_answer": "Yin Min Goh, a graduate student in the Research Laboratory of Electronics in Course 6, hoped undergraduate students would leverage their \"hands-on experience\" and \"fresh perspective\" in her research. She aimed to involve them in her work on \"developing novel algorithms for machine learning and artificial intelligence,\" which would benefit from the unique blend of technical skills and innovative thinking that undergraduates can bring to the table. Her goal was to foster a collaborative environment where undergraduates could contribute meaningfully to her research projects, thereby gaining valuable research experience and contributing to the advancement of the field.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "How did Arjun Chandar MS \u201914 describe the UROP program?",
+      "reference_answer": "Like a \"farm system in baseball\" that nurtures future researchers.",
+      "student_answer": "Arjun Chandar MS \u201914 described the UROP program as a \"great opportunity\" that allowed him to \"get hands-on experience\" and \"work on real-world problems.\" He mentioned that it was a \"very flexible program\" that allowed him to explore different fields and gain valuable research experience. Additionally, he appreciated the mentorship and guidance he received from his UROP advisor and the supportive environment within the MIT community. Overall, he viewed the UROP program as a pivotal experience that helped him grow both professionally and personally during his time at MIT.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "When did the MIT UROP Mixer take place?",
+      "reference_answer": "Tuesday, Oct. 28, 2025 from 3 p.m. to 5 p.m.",
+      "student_answer": "The MIT UROP Mixer took place on April 30, 2021.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "Where was the MIT UROP Mixer held and which offices co-hosted the event?",
+      "reference_answer": "On the second and third floors of the Stratton Student Center; co-hosted by the UROP office and the Provost\u2019s and Chancellor\u2019s Offices.",
+      "student_answer": "The MIT UROP Mixer was held at the MIT Sloan School of Management's 1-3 Infinite Corridor (1-3 EC) on October 14, 2021. The event was co-hosted by the UROP office, which is part of the Office of Undergraduate Research Opportunities (UROP), and the MIT Sloan School of Management.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "How many potential UROP mentors attended the MIT UROP Mixer?",
+      "reference_answer": "An estimated 158 potential UROP mentors.",
+      "student_answer": "The MIT UROP Mixer brought together 30 potential UROP mentors.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "Who is Yin Min Goh and what did she hope to hire undergraduate students to do at the MIT UROP Mixer?",
+      "reference_answer": "Yin Min Goh is a graduate student in the Research Laboratory of Electronics in Course 6 (Electrical Engineering and Computer Science) who hoped to hire undergraduates to leverage the intrinsic benefits of analog hardware.",
+      "student_answer": "Yin Min Goh is a graduate student in the Department of Electrical Engineering and Computer Science (EECS) at MIT. She hoped to hire undergraduate students to work on research projects as UROP (Undergraduate Research Opportunities Program) students at the MIT UROP Mixer. Specifically, she aimed to recruit students to help with her work on \"developing new algorithms for machine learning and artificial intelligence.\" The UROP Mixer provided a platform for her to connect with interested undergraduates and potentially hire them for her research projects.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "What free treats were available to students at the MIT UROP Mixer?",
+      "reference_answer": "Apple cider donuts, boba, tote bags, stickers, and candy.",
+      "student_answer": "At the MIT UROP Mixer, students could enjoy free treats such as cupcakes, cookies, and brownies. Additionally, there were other freebies like mini sandwiches, fruit skewers, and a variety of other snacks and sweets provided by different groups and tables set up for the event. The exact details of the treats might vary, but the event was designed to be a welcoming and indulgent experience for students to sample a range of delicious foods while networking and exploring research opportunities.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "1c2f48e9f04d6237"
+    },
+    {
+      "question": "When did East Campus hold their annual Pumpkin Drop at Tang Hall?",
+      "reference_answer": "Saturday, Oct. 25.",
+      "student_answer": "East Campus held their annual Pumpkin Drop at Tang Hall on Saturday, Oct. 25, 2025.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "How many pumpkins were dropped during the East Campus Pumpkin Drop at Tang Hall?",
+      "reference_answer": "153 pumpkins.",
+      "student_answer": "The East Campus Pumpkin Drop at Tang Hall involved dropping 153 pumpkins.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "From what height were the pumpkins dropped during the East Campus Pumpkin Drop at Tang Hall?",
+      "reference_answer": "248 feet.",
+      "student_answer": "The pumpkins were dropped from a height of 248 feet during the East Campus Pumpkin Drop at Tang Hall.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "Which MIT student-run culinary club collaborated with East Campus to serve pumpkin-themed dishes at the Pumpkin Drop?",
+      "reference_answer": "MINCE.",
+      "student_answer": "The MIT student-run culinary club that collaborated with East Campus to serve pumpkin-themed dishes at the Pumpkin Drop was the MIT Spinning Plates club, also known as the MIT Dining Services Culinary Club. This collaboration took place in 2025, as mentioned in the passage. The Spinning Plates club, which is part of the MIT Dining Services, worked alongside East Campus (EC) to create and serve pumpkin-themed dishes at the event. This partnership allowed for a unique culinary experience that combined the creativity of the EC with the culinary skills of the Spinning Plates club.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "Who said there is something so deeply satisfying about a pumpkin exploding in relation to the East Campus Pumpkin Drop?",
+      "reference_answer": "Lucy Gray \u201927.",
+      "student_answer": "The passage does not explicitly attribute the statement \"there is something so deeply satisfying about a pumpkin exploding\" to a specific individual. The sentiment is expressed by the narrator or the collective voice of the passage, which describes the experience of the event and the feelings of those involved. The quote is part of the narrative that captures the enthusiasm and excitement of the participants, particularly those involved in the preparation and execution of the Pumpkin Drop event. It reflects the shared joy and satisfaction that the event brings to the students of East Campus (EC) and their guests.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "When did East Campus hold their annual Pumpkin Drop at Tang Hall?",
+      "reference_answer": "Saturday, Oct. 25, 2025",
+      "student_answer": "East Campus held their annual Pumpkin Drop at Tang Hall on Saturday, Oct. 25, 2025.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "How many pumpkins were dropped during East Campus\u2019s Pumpkin Drop at Tang Hall?",
+      "reference_answer": "153",
+      "student_answer": "East Campus\u2019s Pumpkin Drop at Tang Hall involved dropping 153 pumpkins.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "From what height were the pumpkins dropped during East Campus\u2019s Pumpkin Drop at Tang Hall?",
+      "reference_answer": "248 feet",
+      "student_answer": "The pumpkins were dropped from a height of 248 feet during East Campus\u2019s Pumpkin Drop at Tang Hall.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "Which part of East Campus historically organized the Pumpkin Drop?",
+      "reference_answer": "the first floor of EC\u2019s west parallel (\u201c1W\u201d or \u201cStickman\u201d)",
+      "student_answer": "The East Campus (EC) Green Building historically organized the Pumpkin Drop. The event was originally organized by the first floor of the Green Building, known as \"1W\" or \"Stickman,\" and it has been a longstanding tradition for them to host the event. The passage mentions that the event was moved to Tang Hall in 2025 due to renovations at East Campus, but it was previously organized by the EC Green Building.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "Which student-run culinary club collaborated with East Campus to serve pumpkin-themed dishes at Pumpkin Drop?",
+      "reference_answer": "MINCE",
+      "student_answer": "The collaboration between the student-run culinary club, EC's \"Spice Rack,\" and East Campus (EC) to serve pumpkin-themed dishes at Pumpkin Drop is mentioned in the passage. The event took place on Saturday, Oct. 25, 2025, and involved a team effort from both the culinary club and EC. The passage states that \"EC\u2019s \u2018Spice Rack\u2019 collaborated with East Campus to serve pumpkin-themed dishes\" at the event. This collaboration resulted in a variety of pumpkin-themed dishes being served to attendees, showcasing the culinary creativity and teamwork between the two groups.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "f19e5c4a7c670eb9"
+    },
+    {
+      "question": "Which two newcomers won seats to the Cambridge city council in the Nov. 4 election?",
+      "reference_answer": "Ayah Al-Zubi and Timothy R. Flaherty.",
+      "student_answer": "Elizabeth Hudson and Patricia Nolan",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "Which incumbents retained their seats on the Cambridge city council in the Nov. 4 election?",
+      "reference_answer": "E. Denise Simmons, Marc C. McGovern, Burhan Azeem \u201919, Patricia M. Nolan, Sumbul Siddiqui, Jivan G. Sobrinho-Wheeler, and Catherine Zusy.",
+      "student_answer": "Elizabeth Hudson and Marc C. McGovern were the incumbents who retained their seats on the Cambridge city council in the Nov. 4 election. They were the only incumbents reelected, as the election saw a significant turnover with seven incumbents not being reelected. The election also brought in new council members, including Ayah Al-Zubi, Timothy R. Flaherty, and Patricia M. Nolan, among others, reflecting a shift in the council's composition.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "Who received the most first-choice votes in the Cambridge city council election?",
+      "reference_answer": "Vice Mayor Marc C. McGovern.",
+      "student_answer": "Elizabeth Hudson and Timothy R. Flaherty received the most first-choice votes in the Cambridge city council election. They were the top two candidates and were declared the winners after the ranked-choice voting process was applied.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "How many of A Better Cambridge's endorsed candidates won seats on the Cambridge city council?",
+      "reference_answer": "Five out of eight.",
+      "student_answer": "A total of 7 candidates endorsed by A Better Cambridge (ABC) won seats on the Cambridge city council. These candidates were: Burhan Azeem, Sumbul Ali, Patricia Nolan, Timothy Flaherty, Catherine Zusy, Jivan Sobhani, and Ayah Al-Zubi.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "What change regarding the chairship of the Cambridge school committee did the approved city charter transfer?",
+      "reference_answer": "It transferred the chairship from the mayor to a committee member elected by their peers.",
+      "student_answer": "The approved city charter transfer changed the method of selecting the chair of the Cambridge school committee. Previously, the chair was elected by the committee members, but with the new charter, the chair is now elected by the city council. This change was part of a broader set of reforms aimed at increasing transparency and accountability in the city's governance structure.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "Who won the nine available seats on the Cambridge city council in the Nov. 4 election?",
+      "reference_answer": "E. Denise Simmons; Marc C. McGovern; Burhan Azeem \u201919; Patricia M. Nolan; Sumbul Siddiqui; Jivan G. Sobrinho-Wheeler; Catherine Zusy; Ayah Al-Zubi; Timothy R. Flaherty",
+      "student_answer": "Seven incumbents and two challengers won the nine available seats on the Cambridge city council in the Nov. 4 election. The incumbents who retained their seats were Mayor E. Denise Simmons, Vice Mayor Marc C. McGovern, Burhan Azeem, Timothy R. Flaherty, Patricia M. Nolan, and Sumbul S. Ali. The two newcomers to the council were Ayah Al-Zubi and Timothy R. Flaherty, who was re-elected despite being a challenger.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "When did the City of Cambridge\u2019s election commission announce the preliminary results of the 2025 city council and school committee elections?",
+      "reference_answer": "At 12:28 a.m. on Wednesday, Nov. 5",
+      "student_answer": "The City of Cambridge\u2019s election commission announced the preliminary results of the 2025 city council and school committee elections on Wednesday, November 5, 2025, at 12:28 a.m.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "Who received the most first-choice votes in the Cambridge city council election?",
+      "reference_answer": "Vice Mayor Marc C. McGovern",
+      "student_answer": "Elizabeth Hudson and Timothy R. Flaherty received the most first-choice votes in the Cambridge city council election. They were the top two candidates and were declared the winners after the ranked-choice voting process was applied.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "Which incumbent councilor did not win reelection after being eliminated in the 12th count of ranked-choice votes?",
+      "reference_answer": "Ayesha Wilson",
+      "student_answer": "The incumbent councilor who did not win reelection after being eliminated in the 12th count of ranked-choice votes was Ayah Al-Zubi. She was one of the two council members who were eliminated in the ranked-choice voting process, as per the passage. The other eliminated candidate was Timothy R. Flaherty, who was also mentioned in the passage. However, the question specifically asks for the incumbent councilor who did not win reelection, and Ayah Al-Zubi fits this description as she was an incumbent and was eliminated in the 12th count.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "What change did voters approve to the city charter regarding the Cambridge school committee?",
+      "reference_answer": "Transferring the chairship of the school committee from the mayor to a committee member elected by their peers",
+      "student_answer": "Voters approved a change to the city charter that will allow the Cambridge school committee to have seven members instead of the previous five, with the election of these members now being staggered over two years. This change was part of a broader set of reforms aimed at improving the governance and accountability of the school committee, following a series of controversies and challenges within the Cambridge Public School system. The new system is designed to ensure a more stable and effective school committee structure, with staggered terms to provide continuity and prevent abrupt changes in leadership.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "6629c5d055114a39"
+    },
+    {
+      "question": "When did MIT Admissions release the first-year class profile for the Class of 2029?",
+      "reference_answer": "Mid-October.",
+      "student_answer": "MIT Admissions released the first-year class profile for the Class of 2029 on November 17, 2025.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What terminology changes did the Integrated Postsecondary Education Data System (IPEDS) require for reporting sex and gender?",
+      "reference_answer": "Replace the terms \"gender,\" \"men,\" and \"women\" with \"sex,\" \"male,\" and \"female,\" respectively, and eliminate \"non-binary\" as a gender option.",
+      "student_answer": "The Integrated Postsecondary Education Data System (IPEDS) required the following changes for reporting sex and gender:\n\n1. **Terminology Change for \"Sex\":** IPEDS required institutions to replace the terms \"gender,\" \"men,\" and \"women,\" with \"sex,\" \"male,\" and \"female,\" respectively. This change was made to align with the federal government's directive to use specific, scientifically recognized terms.\n\n2. **Elimination of \"Non-binary\" as a Gender Option:** The IPEDS methodology removed \"non-binary\" as a gender option. This means that applicants and students are now categorized strictly as either \"male\" or \"female\" under the new IPEDS reporting standards.\n\n3. **Consistency in Reporting:** The IPEDS methodology sought to standardize the way data on sex and gender are reported across all participating institutions, ensuring that the data collected are consistent and comparable.\n\nThese changes reflect a broader shift towards using more precise and universally understood terms in the collection and reporting of demographic data, as well as a move to streamline and standardize the reporting process across institutions participating in federal student financial aid programs.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "Under IPEDS methodology, how are multi-racial Hispanic students counted in racial and ethnic categories?",
+      "reference_answer": "They are counted only as Hispanic.",
+      "student_answer": "Under the IPEDS methodology, multi-racial Hispanic students are counted as Hispanic only. This means that they are placed in the \"Hispanic or Latino\" category and are not included in the \"Two or More\" category for multi-racial students. This approach is a result of the IPEDS methodology's requirement to use a single category for Hispanic students, regardless of their racial identity, and to categorize multi-racial students separately, without including them in the Hispanic count. This methodology was implemented in response to a Jan. 20 executive order that recognized two sexes and required changes in how data was collected and reported by institutions participating in federal student financial aid programs.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What racial and international percentages did MIT report for the Class of 2029?",
+      "reference_answer": "38% Asian American, 6% Black or African American, 13% Hispanic or Latino, 23% White or Caucasian, 7% \"Two or More,\" and 11% international.",
+      "student_answer": "MIT reported the following racial and international percentages for the Class of 2029:\n\n- **White or Caucasian:** 13%\n- **Black or African American:** 13%\n- **Hispanic or Latino:** 13%\n- **Two or More Races:** 5%\n- **International (students from outside the U.S.):** 23%\n\nThese percentages are derived from the data provided in the passage, which indicates that the Class of 2029 is composed of 13% White or Caucasian, 13% Black or African American, 13% Hispanic or Latino, 5% of students who identify as \"Two or More Races,\" and 23% of students who are international (from outside the U.S.). The remaining percentage would be accounted for by students who did not identify within these categories, though the passage does not specify how many students fall into this \"Other\" category.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "How did the fraction of first-year students eligible for Pell Grants change from 2024 to 2025 at MIT?",
+      "reference_answer": "It increased from 24% in 2024 to 27% in 2025 (a 12.5% increase).",
+      "student_answer": "The fraction of first-year students eligible for Pell Grants increased from 24% in 2024 to 27% in 2025 at MIT. This change was noted by the Institute's reporting on the percentage of students receiving Pell Grants, which was influenced by the new IPEDS methodology that required the use of \"sex\" instead of \"gender,\" and the inclusion of \"Two or More\" as a category for racial or ethnic identification. The increase in Pell-eligible students from 2024 to 2025 could be attributed to various factors, including changes in the eligibility criteria, economic conditions affecting student financial need, and possibly the introduction of new programs or policies aimed at increasing access to MIT for students from lower-income backgrounds. However, the exact reasons for the increase are not explicitly detailed in the provided passage.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What percentage of the MIT Class of 2029 was reported as Asian American?",
+      "reference_answer": "38%",
+      "student_answer": "The MIT Class of 2029 was reported as having 13.7% of its students identified as Asian American. This percentage is derived from the information provided in the passage, which states that 13.7% of the Class of 2029 identified as Asian American. This figure is based on the self-reported racial or ethnic identities of the students as per the IPEDS methodology used by MIT for reporting demographic data.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What change did the Integrated Postsecondary Education Data System (IPEDS) require for the terms used to report sex and gender?",
+      "reference_answer": "Replace \u201cgender,\u201d \u201cmen,\u201d and \u201cwomen\u201d with \u201csex,\u201d \u201cmale,\u201d and \u201cfemale,\u201d and eliminate \u201cnon-binary\u201d as a gender option.",
+      "student_answer": "The Integrated Postsecondary Education Data System (IPEDS) required a change in the terms used to report sex and gender. Specifically, it mandated that the terms \"gender,\" \"men,\" and \"women,\" be replaced with \"sex,\" \"male,\" and \"female,\" respectively, and that the term \"non-binary\" be eliminated as a gender option. This change was implemented in response to a Jan. 20 executive order that recognized two sexes and required the use of specific terminology in federal data collection. The IPEDS methodology was updated to align with these new requirements, affecting how institutions report demographic data across various platforms.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What did Stu Schmill \u201986, Dean of Admissions and Student Financial Services at MIT, say MIT did in 2025 regarding how students report their identity?",
+      "reference_answer": "MIT did not change how students report their identity; the Institute chose to use the IPEDS methodology to publish data across all websites.",
+      "student_answer": "In 2025, MIT did not change the way students report their identity in terms of race or ethnicity. Instead, the change was in how the data was collected and reported due to the IPEDS methodology update. This update required MIT to replace terms like \"gender,\" \"men,\" and \"women,\" with \"sex,\" \"male,\" and \"female,\" respectively, and to eliminate \"non-binary\" as a gender option. Additionally, the IPEDS methodology required MIT to count applicants and students under only one racial or ethnic category, meaning multi-racial Hispanic students would be counted only as Hispanic, and non-Hispanic multi-racial students would be counted as \"Two or More\" and removed from other categories. This change affected how the data was reported but not how students self-identify within the MIT application process. Stu Schmill \u201986, the Dean of Admissions and Student Financial Services, confirmed that MIT did not alter the reporting of students' identities but rather followed the new IPEDS guidelines.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "By how much did the percentage of MIT first-year students eligible for Pell Grants increase from 2024 to 2025?",
+      "reference_answer": "It increased from 24% to 27%, a 12.5% increase.",
+      "student_answer": "The percentage of MIT first-year students eligible for Pell Grants increased from 24% in 2024 to 27% in 2025. This represents an increase of 3 percentage points.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "What financial aid policy did MIT announce in November 2024 concerning family income and tuition?",
+      "reference_answer": "All students with family income below $200,000 can attend tuition-free.",
+      "student_answer": "MIT announced in November 2024 a new financial aid policy concerning family income and tuition, which allows all students with family incomes below $200,000 to attend tuition-free. This policy was part of MIT's efforts to make higher education more accessible and reduce financial barriers for students from lower-income families. The policy was announced in response to the increasing concerns about the affordability of higher education and the need to address the financial constraints faced by many students and their families.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "c8784bc3dd24de34"
+    },
+    {
+      "question": "When did the second annual MIT Human Insight Collaborative (MITHIC) event take place?",
+      "reference_answer": "Monday, Nov. 17.",
+      "student_answer": "The second annual MIT Human Insight Collaborative (MITHIC) event took place on November 17, 2021.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Who delivered the opening remarks at the MIT Human Insight Collaborative (MITHIC) event?",
+      "reference_answer": "Provost Anantha Chandrakasan and President Sally Kornbluth.",
+      "student_answer": "Sally Kornbluth, the President of MIT, delivered the opening remarks at the MIT Human Insight Collaborative (MITHIC) event.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "How much annual funding does the MIT Human Insight Collaborative (MITHIC) provide for programs and research projects?",
+      "reference_answer": "$3 million in annual funds.",
+      "student_answer": "The MIT Human Insight Collaborative (MITHIC) provides $3 million in annual funds for programs and research projects. This funding is specifically aimed at promoting the arts, humanities, and social sciences, as well as interdisciplinary research and collaboration across the Institute.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Which Nobel Prize-winning Economics professor worked on research combining economics and machine learning to detect past silent heart attacks in India?",
+      "reference_answer": "Esther Duflo.",
+      "student_answer": "The Nobel Prize-winning Economics professor who worked on research combining economics and machine learning to detect past silent heart attacks in India is Abhijit Banerjee. He is one of the three recipients of the 2020 Nobel Prize in Economics, along with Esther Duflo and Michael Kremer. Their work focuses on using randomized controlled trials and other empirical strategies to answer questions in development economics, including improving health outcomes in developing countries. The specific mention of detecting past silent heart attacks in India through machine learning techniques is not directly attributed to Banerjee alone but is part of the broader work on using data science and economics to address health-related issues in developing nations, which aligns with the themes of their research.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Which dean centered part of his keynote address on the humanization of work and managing generative AI?",
+      "reference_answer": "Richard M. Locke.",
+      "student_answer": "Dean of the MIT School of Engineering, Kornbluth, centered part of his keynote address on the humanization of work and managing generative AI.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "When was the second annual MIT Human Insight Collaborative (MITHIC) event held?",
+      "reference_answer": "Monday, Nov. 17.",
+      "student_answer": "The second annual MIT Human Insight Collaborative (MITHIC) event was held on November 17, 2021.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Who delivered the opening remarks at the second annual MIT Human Insight Collaborative (MITHIC) event?",
+      "reference_answer": "Provost Anantha Chandrakasan and President Sally Kornbluth.",
+      "student_answer": "Sally Kornbluth, the President of MIT, delivered the opening remarks at the second annual MIT Human Insight Collaborative (MITHIC) event.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "How much annual funding does the MIT Human Insight Collaborative (MITHIC) provide for programs and research projects?",
+      "reference_answer": "$3 million.",
+      "student_answer": "The MIT Human Insight Collaborative (MITHIC) provides $3 million in annual funds for programs and research projects. This funding is specifically aimed at promoting the arts, humanities, and social sciences, as well as interdisciplinary research and collaboration across the Institute.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Which departments collaborated on the project about \"socio-culturally aware AI\" showcased at the MIT Human Insight Collaborative (MITHIC) event?",
+      "reference_answer": "The Anthropology and Electrical Engineering and Computer Science (EECS) departments.",
+      "student_answer": "The collaboration between the Anthropology and Electrical Engineering and Computer Science (EECS) departments resulted in the project about \"socio-culturally aware AI\" showcased at the MIT Human Insight Collaborative (MITHIC) event. This project exemplifies the interdisciplinary approach encouraged by MITHIC, integrating humanities and social sciences with technology to create AI systems that are sensitive to cultural and societal contexts.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "In which country did Nobel Prize-winning Economics Professor Esther Duflo PhD \u201999 and her team test individuals for past silent heart attacks?",
+      "reference_answer": "India.",
+      "student_answer": "The passage does not explicitly state the country in which Nobel Prize-winning Economics Professor Esther Duflo PhD \u201999 and her team tested individuals for past silent heart attacks. However, it mentions that Duflo and her team conducted their research in collaboration with MIT and that they were involved in a study in \"rural Bangladesh\" as part of their work on poverty alleviation and health interventions.\n\nGiven this information, it is reasonable to infer that the testing for past silent heart attacks took place in Bangladesh, as it is the specific location mentioned in relation to their collaborative work and research efforts. The passage highlights the broader context of their work, which includes poverty alleviation and health interventions in rural areas, suggesting that the location of their testing was part of these efforts.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "26770afa853ff51f"
+    },
+    {
+      "question": "Who are the four MIT students and alumni named Rhodes Scholars-Elect for 2026?",
+      "reference_answer": "Vivian Chinoda \u201925, Alice Hall \u201926, Sofia Lara \u201926, and Sophia Wang \u201924.",
+      "student_answer": "The four MIT students and alumni named Rhodes Scholars-Elect for 2026 are Vivian Chinoda \u201925, Alice Hall \u201926, Sofia Lara \u201926, and Sophia Wang \u201924.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "When will the Rhodes Scholars-Elect begin their postgraduate studies at Oxford University?",
+      "reference_answer": "Fall 2026.",
+      "student_answer": "The Rhodes Scholars-Elect will begin their postgraduate studies at Oxford University in fall 2026.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What postgraduate degree will Alice Hall \u201926 pursue at Oxford University?",
+      "reference_answer": "A DPhil in engineering with a concentration in sustainable heating and cooling techniques.",
+      "student_answer": "Alice Hall \u201926 will pursue a postgraduate degree in engineering with a focus on sustainable heating and cooling techniques at Oxford University. Specifically, she will be working towards a DPhil (Doctor of Philosophy) in engineering, which is a higher doctoral degree in the UK equivalent to a Ph.D. in the United States. Her research will concentrate on sustainable heating and cooling techniques, which aligns with her interest in addressing climate change through international action and her commitment to interdisciplinary approaches.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What dual master's degrees will Vivian Chinoda \u201925 pursue at Oxford University?",
+      "reference_answer": "Social data science and public policy.",
+      "student_answer": "Vivian Chinoda \u201925 will pursue dual master's degrees in Business Analytics and Social Data Science at Oxford University.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "Who is Kim Benard and what role did she play in the Rhodes Scholarship process at MIT?",
+      "reference_answer": "Kim Benard is the Associate Dean and Director of Distinguished Fellowships and Academic Excellence who aided applicants, finalists, and the Rhodes Scholars-Elect.",
+      "student_answer": "Kim Benard is the Associate Dean and Director of Distinguished Fellowships and Academic Excellence at MIT. She played a significant role in the Rhodes Scholarship process at MIT by supporting the applicants, finalists, and ultimately the winners through the application process. She worked closely with the Distinguished Fellowships team and was instrumental in aiding the applicants, including the four MIT students who were awarded the Rhodes Scholarships in 2026. Her support extended to helping applicants navigate the rigorous application process, providing guidance, and aiding in the final selection of the Rhodes Scholars-Elect. Her dedication to the success of the Rhodes Scholars-Elect is evident in her role as a key figure in the selection process and her commitment to helping students achieve their academic and personal goals.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "Who are the four MIT students and alumni named Rhodes Scholars-Elect?",
+      "reference_answer": "Vivian Chinoda \u201925, Alice Hall \u201926, Sofia Lara \u201926, and Sophia Wang \u201924.",
+      "student_answer": "The four MIT students and alumni named Rhodes Scholars-Elect are Vivian Chinoda \u201925, Alice Hall \u201926, Sofia Lara \u201926, and Sophia Wang \u201924.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What postgraduate program will Vivian Chinoda \u201925 pursue at Oxford University?",
+      "reference_answer": "Dual masters degrees in social data science and public policy.",
+      "student_answer": "Vivian Chinoda \u201925 will pursue a postgraduate program in the Master of Philosophy (MPhil) program at Oxford University. This program is typically a one-year course for students who have already completed a bachelor's degree and wish to pursue further academic study at the graduate level. The MPhil program allows students to specialize in a specific area of research and often serves as a stepping stone to a PhD.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What DPhil concentration will Alice Hall \u201926 pursue at Oxford University?",
+      "reference_answer": "A DPhil in engineering with a concentration in sustainable heating and cooling techniques.",
+      "student_answer": "Alice Hall \u201926 will pursue a DPhil concentration in Chemical Engineering with a focus on sustainable heating and cooling techniques.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What background did Sofia Lara \u201926 cite as shaping her approach to equitable precision medicine for women\u2019s health?",
+      "reference_answer": "Her background as a Latina from the San Fernando Valley in California.",
+      "student_answer": "Sofia Lara \u201926 cited her background in both computer science and women's health as shaping her approach to equitable precision medicine for women's health. She mentioned her experience in the intersection of technology and healthcare, emphasizing the importance of leveraging data and computational tools to address health disparities, particularly in women's health. Her dual background in engineering and her focus on women's health issues have equipped her with a unique perspective on how to use technology to improve healthcare outcomes equitably. This approach is informed by her commitment to ensuring that precision medicine is accessible and beneficial to all, especially marginalized groups, and that it takes into account the specific needs and biological differences of women.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "What is Kim Benard's role at MIT?",
+      "reference_answer": "Associate Dean and Director of Distinguished Fellowships and Academic Excellence.",
+      "student_answer": "Kim Benard is the Associate Dean and Director of Distinguished Fellowships and Academic Excellence at MIT. She is also the Director of the Distinguished Fellowships team, which supports applicants and winners of the Rhodes Scholarships-Elect. Her role involves aiding students in the application process for prestigious fellowships and academic awards, as well as supporting the overall academic and career development of MIT students.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "4e57801b1c35ae18"
+    },
+    {
+      "question": "Who announced that MIT would pull three levers to correct mounting financial pressures?",
+      "reference_answer": "President Sally Kornbluth",
+      "student_answer": "MIT President Sally Kornbluth announced that MIT would pull three levers to correct mounting financial pressures. These levers included increasing revenue, reducing costs, and managing the endowment more effectively. This decision was made in response to the significant financial pressures the Institute was facing, including a budget shortfall estimated at $300 million annually. The specific actions mentioned included increasing revenue through new initiatives, reducing costs by closing libraries and other measures, and adjusting the use of the endowment to support the budget.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "What is the estimated annual budget shortfall for MIT?",
+      "reference_answer": "$300 million a year",
+      "student_answer": "The estimated annual budget shortfall for MIT is $300 million. This shortfall is due to increased taxes on investment returns and national cuts to scientific research, as well as the university's own financial constraints. The budget shortfall is a significant challenge for MIT, which has been forced to consider measures such as increasing revenue, reducing costs, and reevaluating its financial commitments.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "When will the Dewey and Barker libraries be shut down?",
+      "reference_answer": "June 2026",
+      "student_answer": "The Dewey and Barker libraries will be shut down in June 2026.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "What will MIT do with the Wunsch Conservation Lab?",
+      "reference_answer": "Wind down the Wunsch Conservation Lab",
+      "student_answer": "MIT will continue to use the Wunsch Conservation Lab for its intended purpose, which is to preserve and conserve rare and valuable books and manuscripts. The lab, which was established with a $3 million gift from the late MIT alumnus and philanthropist Peter A. Wunsch, is a testament to his commitment to the preservation of knowledge and the arts. The lab is equipped with state-of-the-art facilities and expertise to handle delicate materials, and it plays a crucial role in maintaining the library's collection, which includes rare and historic books.\n\nThe passage mentions that the lab will continue its work under the stewardship of MIT Libraries, with the support of the Wunsch Conservation Lab's staff and the broader MIT community. The lab's mission aligns with MIT's commitment to education, research, and innovation, and it is expected to remain an active part of the Institute's efforts to preserve and make accessible its vast collection of materials.\n\nThe decision to close Barker and Dewey Libraries, as mentioned in the passage, does not affect the Wunsch Conservation Lab directly. The lab's operations are focused on the preservation and conservation of materials, and it is not mentioned that these services will be discontinued. Instead, the closure of the Barker and Dewey Libraries is part of a broader budget",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "How much were MIT Libraries tasked with cutting from their budget and what was the approximate annual dollar amount?",
+      "reference_answer": "5%, or around $1.6 million annually",
+      "student_answer": "MIT Libraries were tasked with cutting $1.6 million from their budget annually.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "When will the Dewey and Barker libraries be shut down?",
+      "reference_answer": "June 2026.",
+      "student_answer": "The Dewey and Barker libraries will be shut down in June 2026.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "Who announced that MIT would pull three levers (increasing revenue, reducing costs, and \"rebalancing\") to address financial pressures?",
+      "reference_answer": "President Sally Kornbluth.",
+      "student_answer": "President Sally Kornbluth announced that MIT would pull three levers (increasing revenue, reducing costs, and \"rebalancing\") to address financial pressures. This announcement was made in response to the budget shortfall of $300 million annually, which was identified as a result of increased tax on investment returns and national cuts to scientific research. The strategy includes increasing revenue through unspecified means, reducing costs by unspecified methods, and \"rebalancing\" the budget, which likely involves reallocating funds and adjusting priorities within the Institute. This approach was outlined in a November 2025 statement by Kornbluth, aiming to address the financial challenges without compromising the educational and research missions of MIT.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "What annual budget shortfall did MIT estimate and what were the main causes?",
+      "reference_answer": "$300 million a year, mostly due to an increased tax on investment returns and national cuts to scientific research.",
+      "student_answer": "MIT estimated an annual budget shortfall of $300 million. The main causes of this shortfall were attributed to increased tax on investment returns and national cuts to scientific research, as well as the need to address financial pressures from increased student financial aid and the endowment's performance. Specifically, the budget shortfall was exacerbated by a 5% cut in federal funding for scientific research, a 2% cut in state funding, and the requirement to increase student financial aid without a corresponding increase in revenue. Additionally, the endowment's performance was a factor, as it was expected to generate more income than it did in the fiscal year 2025-2026.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "What action did MIT decide to take regarding the Wunsch Conservation Lab?",
+      "reference_answer": "MIT will take steps to \"wind down\" the Wunsch Conservation Lab.",
+      "student_answer": "MIT decided to close the Wunsch Conservation Lab in June 2026.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "By what percentage and dollar amount were MIT Libraries directed to cut their budget?",
+      "reference_answer": "5%, or around $1.6 million annually.",
+      "student_answer": "MIT Libraries were directed to cut their budget by 5.7%, or $1.6 million. This was part of a broader budget rebalancing across the Institute in response to a reduction in federal funding and an overall budget shortfall. The specific cuts to the libraries were announced as part of the Institute's efforts to manage its finances more efficiently, with the aim of maintaining essential services while reducing costs.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "224befa8f3966a4f"
+    },
+    {
+      "question": "When will Lisa Su \u201990 SM \u201991 PhD \u201994 deliver MIT\u2019s 2026 Commencement address?",
+      "reference_answer": "May 28, 2026, at the OneMIT Commencement Ceremony.",
+      "student_answer": "Lisa Su \u201990 SM \u201991 PhD \u201994 will deliver MIT's 2026 Commencement address on May 28, 2026.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "Who commended Lisa Su \u201990 SM \u201991 PhD \u201994 for her role as a mentor and inspiration to classmates?",
+      "reference_answer": "President Sally Kornbluth.",
+      "student_answer": "Lisa Su \u201990 SM \u201991 PhD \u201994 was commended for her role as a mentor and inspiration to her classmates by the MIT Class of 2026. The passage mentions that she has been recognized for her contributions to the Institute and her impact on the Class of 2026, with the class expressing their gratitude and admiration for her influence and support. This commendation comes from her peers and the students she has mentored throughout her career at MIT and beyond.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "What company has Lisa Su \u201990 SM \u201991 PhD \u201994 served as chair and CEO of since 2014?",
+      "reference_answer": "Advanced Micro Devices (AMD).",
+      "student_answer": "Lisa Su has served as the chair and CEO of Advanced Micro Devices (AMD) since 2014.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "When was Building 12, which houses MIT.nano, named the Lisa T. Su Building?",
+      "reference_answer": "In 2022.",
+      "student_answer": "Building 12, which houses MIT.nano, was named the Lisa T. Su Building in 2026. This information is derived from the passage provided, which mentions that the naming occurred in the same year as the event described, aligning with the timeline of the announcement and the context given.",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "What is the purpose of the Lisa Su Fellowship Fund established by Lisa Su \u201990 SM \u201991 PhD \u201994 in 2018?",
+      "reference_answer": "To support female graduate students in nanotechnology.",
+      "student_answer": "The Lisa Su Fellowship Fund, established by Lisa Su '90 SM '91 PhD '94 in 2018, aims to support female graduate students in nanotechnology and related fields. The fund provides financial assistance to these students to help them pursue their studies and research, thereby encouraging diversity and inclusion in the field. The initiative reflects Lisa Su's commitment to giving back to MIT and supporting the next generation of scientists and engineers, particularly women, who are often underrepresented in STEM fields.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "When will Lisa Su deliver MIT\u2019s 2026 Commencement address?",
+      "reference_answer": "May 28, 2026, at the OneMIT Commencement Ceremony.",
+      "student_answer": "Lisa Su will deliver MIT\u2019s 2026 Commencement address on May 28, 2026.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "Since 2014, which company has Lisa Su served as chair and CEO of?",
+      "reference_answer": "Advanced Micro Devices (AMD).",
+      "student_answer": "Lisa Su has served as the chair and CEO of Advanced Micro Devices (AMD) since 2014.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "Which MIT building was named in Lisa Su's honor in 2022?",
+      "reference_answer": "Building 12, named the Lisa T. Su Building.",
+      "student_answer": "The MIT building named in Lisa Su's honor in 2022 is the Lisa T. Su Building.",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "Which award from the Global Semiconductor Association has Lisa Su received?",
+      "reference_answer": "The Dr. Morris Chang Exemplary Leadership Award.",
+      "student_answer": "The Global Semiconductor Association\u2019s Dr. Morris Chang Exemplary Leadership Award",
+      "verdict": "correct",
+      "is_correct": true,
+      "id": "2765940ce80bc656"
+    },
+    {
+      "question": "What did MIT President Sally Kornbluth praise Lisa Su for?",
+      "reference_answer": "Her role as a mentor and inspiration for her classmates and for creating instructions that guided generations of student researchers in using the Institute\u2019s advanced equipment.",
+      "student_answer": "MIT President Sally Kornbluth praised Lisa Su for her \"outstanding contributions to the semiconductor industry and her commitment to advancing women in STEM fields.\"",
+      "verdict": "incorrect",
+      "is_correct": false,
+      "id": "2765940ce80bc656"
+    }
+  ]
+}
