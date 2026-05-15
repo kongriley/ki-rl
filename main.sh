@@ -2,16 +2,17 @@
 # Usage: ./main.sh   or   MODE=no_gen ./main.sh
 MODE="${MODE:-default}"
 
-DATASET="thetech"
-LOG_DIR="./out/"
+DATASET="wiki_20"
+LOG_DIR="./out/logs/"
 DEBUG=
 
+NUM_ITERATIONS=3
 
 source .venv/bin/activate
 
 common_args=(
 	--dataset_path ./data/${DATASET}/data.json
-	--num_generation_iterations 50
+	--num_generation_iterations ${NUM_ITERATIONS}
 	--num_question_generations 5
 	--num_questions_per_generation 5
 	--report_student_performance

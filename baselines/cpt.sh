@@ -1,5 +1,5 @@
 NUM_GPUS=$(python -c "import torch; print(torch.cuda.device_count())")
-DATASET="2025_disasters"
+DATASET="thetech"
 
 torchrun --standalone --nproc_per_node=${NUM_GPUS} baselines/cpt.py \
     --model_name allenai/OLMo-2-1124-7B-Instruct \

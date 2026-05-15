@@ -27,7 +27,7 @@ if "MASTER_PORT" not in os.environ:
     os.environ["MASTER_PORT"] = str(_find_free_port())
 
 import torch  # noqa: E402
-from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig  # noqa: E402
 from trl import GRPOConfig, GRPOTrainer  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +55,24 @@ GARBAGE_PENALTY = -1.0
 GOOD_REWARD = 1.0
 
 
+def _ngram_jaccard(text_a: str, text_b: str, ns: Tuple[int, ...] = (1, 2)) -> float:
+    """Jaccard similarity over word n-grams between two texts."""
+    words_a = text_a.lower().split()
+    words_b = text_b.lower().split()
+    if not words_a or not words_b:
+        return 0.0
+    ngrams_a: set = set()
+    ngrams_b: set = set()
+    for n in ns:
+        ngrams_a.update(tuple(words_a[i:i+n]) for i in range(len(words_a) - n + 1))
+        ngrams_b.update(tuple(words_b[i:i+n]) for i in range(len(words_b) - n + 1))
+    if not ngrams_a or not ngrams_b:
+        return 0.0
+    intersection = len(ngrams_a & ngrams_b)
+    union = len(ngrams_a | ngrams_b)
+    return intersection / union if union > 0 else 0.0
+
+
 def _swap_to_gpu(model):
     torch.cuda.empty_cache()
     model.to("cuda")
@@ -73,12 +91,56 @@ def main():
     question_model = AutoModelForCausalLM.from_pretrained(
         manifest["question_model_path"], torch_dtype=torch.bfloat16,
     )
-    student_model = AutoModelForCausalLM.from_pretrained(
-        manifest["student_model_path"], torch_dtype=torch.bfloat16,
-    )
-    judge_model = AutoModelForCausalLM.from_pretrained(
-        manifest["judge_model_path"], torch_dtype=torch.bfloat16,
-    )
+
+    quantize_reward_models = manifest.get("quantize_reward_models", True)
+
+    if quantize_reward_models:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+        student_model = AutoModelForCausalLM.from_pretrained(
+            manifest["student_model_path"],
+            quantization_config=bnb_config,
+            device_map={"": "cuda"},
+        )
+        judge_model = AutoModelForCausalLM.from_pretrained(
+            manifest["judge_model_path"],
+            quantization_config=bnb_config,
+            device_map={"": "cuda"},
+        )
+        mem_gb = torch.cuda.memory_allocated() / (1024 ** 3)
+        print(f"[grpo_phase_worker] Reward models loaded in 4-bit on GPU. "
+              f"GPU memory allocated: {mem_gb:.1f} GB")
+        if mem_gb > 40:
+            raise RuntimeError(
+                f"GPU memory after loading 4-bit reward models is unexpectedly high "
+                f"({mem_gb:.1f} GB). Set quantize_reward_models=false to disable."
+            )
+    else:
+        student_model = AutoModelForCausalLM.from_pretrained(
+            manifest["student_model_path"], torch_dtype=torch.bfloat16,
+        )
+        judge_model = AutoModelForCausalLM.from_pretrained(
+            manifest["judge_model_path"], torch_dtype=torch.bfloat16,
+        )
+
+    if quantize_reward_models:
+        def _swap_to_gpu(model):
+            pass  # 4-bit models are permanently on GPU
+
+        def _swap_to_cpu(model):
+            pass  # 4-bit models cannot be moved; already on GPU
+    else:
+        def _swap_to_gpu(model):
+            torch.cuda.empty_cache()
+            model.to("cuda")
+
+        def _swap_to_cpu(model):
+            model.to("cpu")
+            torch.cuda.empty_cache()
+
     tokenizer = AutoTokenizer.from_pretrained(manifest["tokenizer_name"])
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -87,9 +149,11 @@ def main():
     question_prompt_dataset = build_question_prompt_dataset(dataset)
 
     config = GRPOConfig(**manifest["grpo_config"])
+    diversity_penalty_weight = manifest.get("diversity_penalty_weight", 0.0)
 
     _reward_call_count = [0]
     good_questions = []
+    history_by_passage: Dict[str, List[str]] = {}
 
     @torch.no_grad()
     def reward_question_difficulty(completions, **kwargs) -> float:
@@ -200,6 +264,38 @@ def main():
                     "answer": ref_answers[idx],
                 })
 
+        diversity_penalties = [0.0] * len(questions)
+        if diversity_penalty_weight > 0:
+            batch_by_passage: Dict[str, List[int]] = {}
+            for idx in valid_indices:
+                pid = passage_ids[idx]
+                if pid is not None:
+                    batch_by_passage.setdefault(pid, []).append(idx)
+
+            for pid, indices in batch_by_passage.items():
+                history = history_by_passage.get(pid, [])
+                for idx in indices:
+                    q = questions[idx]
+                    max_sim = 0.0
+                    for other_idx in indices:
+                        if other_idx == idx:
+                            continue
+                        sim = _ngram_jaccard(q, questions[other_idx])
+                        if sim > max_sim:
+                            max_sim = sim
+                    for hist_q in history:
+                        sim = _ngram_jaccard(q, hist_q)
+                        if sim > max_sim:
+                            max_sim = sim
+                    penalty = diversity_penalty_weight * max_sim
+                    diversity_penalties[idx] = penalty
+                    rewards[idx] -= penalty
+
+            for idx in valid_indices:
+                pid = passage_ids[idx]
+                if pid is not None:
+                    history_by_passage.setdefault(pid, []).append(questions[idx])
+
         n_format_bad = sum(1 for v in valid_mask if not v)
         n_samples = min(3, len(questions))
         print(f"\n{'='*60}")
@@ -213,8 +309,11 @@ def main():
             print(f"  Closed verdict: {all_closed_verdicts[j]}")
             print(f"  Open-book A: {all_open_answers[j][:200]}")
             print(f"  Open verdict: {all_open_verdicts[j]}")
-            print(f"  Reason: {all_reasons[j]} -> reward={rewards[j]}")
-        print(f"  Mean reward: {sum(rewards)/len(rewards):.3f}")
+            print(f"  Reason: {all_reasons[j]} -> reward={rewards[j]:.3f}"
+                  + (f" (div_penalty={diversity_penalties[j]:.3f})" if diversity_penalties[j] > 0 else ""))
+        mean_div = sum(diversity_penalties) / len(diversity_penalties) if diversity_penalties else 0.0
+        print(f"  Mean reward: {sum(rewards)/len(rewards):.3f}"
+              + (f" | Mean diversity penalty: {mean_div:.3f}" if diversity_penalty_weight > 0 else ""))
         print(f"{'='*60}\n")
 
         return rewards

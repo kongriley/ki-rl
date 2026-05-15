@@ -45,6 +45,7 @@ def main() -> None:
     dataset = load_dataset("json", data_files=args.data_path, split="train")
     text_column = "text"
     dataset = dataset.select_columns([text_column])
+    dataset = dataset.filter(lambda x: bool(x[text_column] and x[text_column].strip()))
 
     # Append EOS so document boundaries are preserved after packing.
     eos = tokenizer.eos_token or ""
@@ -61,6 +62,7 @@ def main() -> None:
         remove_columns=[text_column],
         num_proc=args.num_proc,
     )
+    tokenized = tokenized.filter(lambda x: len(x["input_ids"]) > 0)
 
     block_size = args.block_size
 
@@ -76,6 +78,22 @@ def main() -> None:
         return result
 
     packed = tokenized.map(group_texts, batched=True, num_proc=args.num_proc)
+
+    if len(packed) == 0:
+        packed = tokenized.map(
+            lambda batch: {"labels": [ids.copy() for ids in batch["input_ids"]]},
+            batched=True,
+            num_proc=args.num_proc,
+        )
+        if len(packed) == 0:
+            raise ValueError(
+                "No trainable examples found after tokenization. "
+                "Check --data_path and ensure input records have non-empty 'text'."
+            )
+        print(
+            "Warning: dataset is too small for full block packing "
+            f"(block_size={block_size}); training on un-packed tokenized examples instead."
+        )
 
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,

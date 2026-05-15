@@ -1,7 +1,8 @@
 """Line plot of closed-book accuracy from eval_questions JSON outputs.
 
 Discovers any files of the form ``results_{x}.json`` or ``results_{x}_{i}.json``
-(where ``i`` is a non-negative integer checkpoint index) in ``--results-dir``.
+(where ``i`` is a non-negative integer checkpoint index) in a required results
+directory argument.
 
 Each distinct ``x`` is treated as a separate method. Methods with indexed files
 are plotted as a trajectory over checkpoints; methods with a single
@@ -107,9 +108,8 @@ def _legend_label_order(present: set[str]) -> list[str]:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
-        "--results-dir",
+        "results_dir",
         type=Path,
-        default=Path("results"),
         help="Directory containing results_*.json files.",
     )
     p.add_argument(
@@ -140,6 +140,18 @@ def main() -> None:
         help="Skip these method names. Repeatable.",
     )
     p.add_argument(
+        "--exclude-ablation",
+        action="store_true",
+        help='Skip every method whose name starts with "ablation" (like repeating --exclude for each).',
+    )
+    p.add_argument(
+        "--max-checkpoint",
+        type=int,
+        default=None,
+        metavar="N",
+        help="For indexed trajectories, only plot checkpoints with index <= N (inclusive).",
+    )
+    p.add_argument(
         "--annotate",
         action="store_true",
         help="Annotate key points (first, best, last) per trajectory.",
@@ -151,6 +163,8 @@ def main() -> None:
         help="Dataset name.",
     )
     args = p.parse_args()
+    if args.max_checkpoint is not None and args.max_checkpoint < 0:
+        raise SystemExit("--max-checkpoint must be non-negative")
 
     results_dir: Path = args.results_dir
     label_map = _method_label_map(_parse_label_overrides(args.label))
@@ -169,17 +183,27 @@ def main() -> None:
             continue
         if name in exclude:
             continue
+        if args.exclude_ablation and name.startswith("ablation"):
+            continue
         label = label_map.get(name, name.replace("_", " ").title())
         series[label].extend(items)
 
     if not series:
-        raise SystemExit("No methods left to plot after applying --include/--exclude.")
+        raise SystemExit(
+            "No methods left to plot after applying --include/--exclude/--exclude-ablation."
+        )
 
     trajectories: dict[str, list[tuple[int, float]]] = {}
     references: dict[str, float] = {}
+    max_ck = args.max_checkpoint
     for label, items in series.items():
-        indexed = sorted((i, pth) for i, pth in items if i is not None)
+        indexed_all = sorted((i, pth) for i, pth in items if i is not None)
         non_indexed = [pth for i, pth in items if i is None]
+        if max_ck is not None:
+            indexed = [(i, pth) for i, pth in indexed_all if i <= max_ck]
+        else:
+            indexed = indexed_all
+
         if indexed:
             trajectories[label] = [(i, _load_accuracy(pth)) for i, pth in indexed]
             for pth in non_indexed:
@@ -187,6 +211,11 @@ def main() -> None:
                     f"Warning: ignoring non-indexed file {pth} for trajectory '{label}'",
                     file=sys.stderr,
                 )
+        elif indexed_all and max_ck is not None:
+            print(
+                f"Warning: no checkpoints <= {max_ck} for '{label}'; skipping.",
+                file=sys.stderr,
+            )
         elif non_indexed:
             if len(non_indexed) > 1:
                 print(
@@ -195,6 +224,9 @@ def main() -> None:
                     file=sys.stderr,
                 )
             references[label] = _load_accuracy(non_indexed[0])
+
+    if not trajectories and not references:
+        raise SystemExit("Nothing to plot (e.g. all trajectories empty after --max-checkpoint).")
 
     plt.rcParams.update(
         {

@@ -72,6 +72,13 @@ def parse_args() -> argparse.Namespace:
                         "If unset, the good-question pool is not tracked at all and every "
                         "distillation row comes from the deficit question generator.")
     p.add_argument("--grpo_beta", type=float, default=0.0)
+    p.add_argument("--diversity_penalty_weight", type=float, default=0.0,
+                   help="Weight for the diversity penalty in GRPO reward. When > 0, penalizes "
+                        "questions similar to other questions generated for the same passage. "
+                        "Penalty = weight * max_jaccard_similarity. Set to 0 to disable.")
+    p.add_argument("--quantize-reward-models", action=argparse.BooleanOptionalAction, default=False,
+                   help="Load student/judge models in 4-bit during GRPO reward evaluation to "
+                        "eliminate GPU swaps.")
     p.add_argument("--grpo_learning_rate", type=float, default=2e-5)
     p.add_argument("--distill_learning_rate", type=float, default=2e-5)
     p.add_argument("--num_question_model_train_epochs", type=float, default=1)
@@ -240,6 +247,8 @@ if __name__ == "__main__":
                 "dataset_path": args.dataset_path,
                 "output_dir": question_model_output,
                 "good_questions_path": good_questions_path,
+                "diversity_penalty_weight": args.diversity_penalty_weight,
+                "quantize_reward_models": args.quantize_reward_models,
                 "grpo_config": grpo_kw,
             }
             grpo_manifest_path = os.path.join(args.output_dir, f"_grpo_manifest_{i}.json")
