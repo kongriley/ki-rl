@@ -140,9 +140,51 @@ def _normalize_completion_text(completion) -> str:
     return str(completion)
 
 
+def _log_eval_benchmark_wandb(
+    args: argparse.Namespace,
+    iteration: int,
+    accuracy: float,
+    correct: int,
+    total: int,
+) -> None:
+    """One W&B run in the parent process; logs each eval as step=iteration."""
+    if not os.environ.get("WANDB_API_KEY"):
+        return
+    try:
+        import wandb
+    except ImportError:
+        return
+    if wandb.run is None:
+        run_name = os.environ.get("WANDB_EVAL_RUN_NAME") or (
+            f"eval-{os.path.basename(os.path.abspath(args.output_dir))}"
+        )
+        init_kw = dict(
+            project=os.environ.get("WANDB_PROJECT", "ki-rl"),
+            name=run_name,
+            job_type="closed_book_eval",
+            config={
+                "dataset_path": args.dataset_path,
+                "output_dir": args.output_dir,
+                "eval_questions_path": args.eval_questions_path,
+                "eval_judge_backend": args.eval_judge_backend,
+                "eval_judge_model": args.eval_judge_model,
+            },
+        )
+        ent = os.environ.get("WANDB_ENTITY")
+        if ent:
+            init_kw["entity"] = ent
+        wandb.init(**init_kw)
+    wandb.log(
+        {"eval/accuracy": accuracy, "eval/correct": correct, "eval/total": total},
+        step=iteration,
+    )
+
+
 if __name__ == "__main__":
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
+    if args.save_student_result_copy_dir:
+        os.makedirs(args.save_student_result_copy_dir, exist_ok=True)
 
     dataset = load_dataset_json(args.dataset_path)
     assert len(dataset) > 0, "No dataset loaded"
@@ -550,6 +592,8 @@ if __name__ == "__main__":
                     json.dump(eval_summary, f, indent=2)
                 print(f"Copied evaluation results to: {copy_path}")
 
+            _log_eval_benchmark_wandb(args, i, accuracy, correct, total)
+
         student_model.to("cpu")
         if judge_model is not None:
             judge_model.to("cpu")
@@ -573,3 +617,11 @@ if __name__ == "__main__":
     student_model.save_pretrained(final_student_model_dir)
     tokenizer.save_pretrained(final_student_model_dir)
     print(f"Saved final student model to: {final_student_model_dir}")
+
+    try:
+        import wandb
+
+        if wandb.run is not None:
+            wandb.finish()
+    except Exception:
+        pass
